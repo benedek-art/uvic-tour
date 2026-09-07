@@ -144,7 +144,9 @@ async function main(): Promise<void> {
 
   // --- guided tour -------------------------------------------------------------------
   const overlay = document.getElementById('tour-overlay')!
-  const chrome = [document.getElementById('sheet')!, scrubEl]
+  // The tour draws its own Stop button in the overlay, so the whole top bar steps aside
+  // too — otherwise the launch button and layer toggles collide with it on a phone.
+  const chrome = [document.getElementById('sheet')!, scrubEl, topbar]
   const setChromeHidden = (hidden: boolean): void => {
     for (const el of chrome) el.classList.toggle('is-hidden', hidden)
   }

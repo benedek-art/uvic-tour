@@ -58,3 +58,10 @@
   0%, 100% { transform: rotate(45deg) scale(.82); opacity: .55; }
   50%      { transform: rotate(45deg) scale(1);   opacity: 1; }
 }
+
+/* Guided tour owns the screen. */
+#topbar.is-hidden {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--dur) var(--ease);
+}
