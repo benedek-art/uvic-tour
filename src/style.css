@@ -1,0 +1,139 @@
+/* ============================================================
+   UVic Tour — component CSS.
+
+   Design tokens live in ./tokens.css and are the single source of truth.
+   Never redefine a colour here; reference the custom property.
+
+   MOBILE FIRST. Everything below is authored for a 390x844 phone.
+   Desktop is a progressive enhancement inside @media (min-width: 900px).
+   ============================================================ */
+
+@import './tokens.css';
+
+/* ------------------------------------------------------------
+   Map surface
+   ------------------------------------------------------------ */
+
+#map {
+  background: var(--void);
+}
+
+/* MapLibre owns every touch gesture inside the canvas — we never intercept pointer or
+   touch events on the map, so pan / pinch / rotate / pitch all behave natively. */
+.maplibregl-canvas-container,
+.maplibregl-canvas {
+  outline: none;
+}
+
+.maplibregl-canvas:focus {
+  outline: none;
+}
+
+/* We render zero third-party tiles, so there is nothing to attribute. These are belt and
+   braces in case a control is ever added by another module. */
+.maplibregl-ctrl-attrib,
+.maplibregl-ctrl-logo {
+  display: none !important;
+}
+
+/* ------------------------------------------------------------
+   Boot state — "Lighting up campus…"
+
+   Sits over the void while the style compiles. It hands off to the rise animation, so it
+   fades rather than cuts; the buildings are already lifting behind it.
+   ------------------------------------------------------------ */
+
+#boot {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s4);
+
+  padding:
+    calc(var(--safe-t) + var(--s5)) calc(var(--safe-r) + var(--s5))
+    calc(var(--safe-b) + var(--s5)) calc(var(--safe-l) + var(--s5));
+
+  background: var(--void);
+  opacity: 1;
+  transition: opacity var(--dur-slow) var(--ease);
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* The mark: a small gold block, seen at the same oblique angle as the buildings behind it.
+   Gold is reserved for the class buildings on the map — the loader is the one piece of
+   chrome that borrows it, because it is literally the map's own mark. */
+#boot .boot-mark {
+  width: 26px;
+  height: 26px;
+  background: var(--gold);
+  border-radius: 3px;
+  transform: rotate(45deg) scaleY(0.62);
+  box-shadow: 0 0 0 0 rgba(255, 182, 39, 0.45);
+  animation: boot-pulse 1600ms var(--ease) infinite;
+}
+
+#boot p {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 400;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+#boot.is-gone {
+  opacity: 0;
+}
+
+#boot[hidden] {
+  display: none;
+}
+
+@keyframes boot-pulse {
+  0% {
+    opacity: 0.55;
+    box-shadow: 0 0 0 0 rgba(255, 182, 39, 0.4);
+  }
+  50% {
+    opacity: 1;
+    box-shadow: 0 0 22px 6px rgba(255, 182, 39, 0.16);
+  }
+  100% {
+    opacity: 0.55;
+    box-shadow: 0 0 0 0 rgba(255, 182, 39, 0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #boot .boot-mark {
+    animation: none;
+    opacity: 1;
+  }
+}
+
+/* ------------------------------------------------------------
+   Desktop enhancement
+   ------------------------------------------------------------ */
+
+@media (min-width: 900px) {
+  #boot {
+    gap: var(--s5);
+  }
+
+  #boot .boot-mark {
+    width: 34px;
+    height: 34px;
+  }
+
+  #boot p {
+    font-size: 13px;
+  }
+}
