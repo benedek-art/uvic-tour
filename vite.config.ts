@@ -26,9 +26,16 @@ export default defineConfig({
     },
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['icons/*.png'],
+      // No `includeAssets` — globPatterns below already sweeps everything in dist/,
+      // and listing the icons twice puts duplicate entries in the precache manifest.
       workbox: {
+        // Everything the app needs offline. The baked campus data (buildings.geojson,
+        // paths.geojson, walkgraph.json) is INLINED into the main JS chunk by the
+        // geojson-as-json plugin, so it rides along in `js` — there are no separate
+        // data files in dist/. `js` also covers the bundled MapLibre worker.
         globPatterns: ['**/*.{js,css,html,json,geojson,woff2,png,svg}'],
+        // Largest single precache entry is the ~1.7 MB main chunk (MapLibre + campus
+        // geometry). The default 2 MB cap would silently drop it and break offline.
         maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
       },
       manifest: {
