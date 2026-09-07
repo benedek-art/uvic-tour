@@ -259,9 +259,23 @@ export function showRoute(
     rafId = requestAnimationFrame(frame)
   }
 
-  // `addSource` throws if the style hasn't landed yet. Defer instead of blowing up.
-  if (map.isStyleLoaded()) draw()
-  else map.once('load', draw)
+  // `addSource` throws if the style hasn't landed yet, so defer instead of blowing up.
+  // Both events are waited on, guarded to fire the draw once: `load` covers the ordinary
+  // cold-start case, and `idle` covers the one that would otherwise hang forever — `load`
+  // having already fired while a source is still settling, which leaves `isStyleLoaded()`
+  // false and a `once('load')` listener waiting for an event that will never come again.
+  if (map.isStyleLoaded()) {
+    draw()
+  } else {
+    let drawn = false
+    const drawOnce = (): void => {
+      if (drawn) return
+      drawn = true
+      draw()
+    }
+    map.once('load', drawOnce)
+    map.once('idle', drawOnce)
+  }
 
   return { metres: result.metres, minutes: result.minutes }
 }

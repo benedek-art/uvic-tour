@@ -94,6 +94,41 @@ async function main(): Promise<void> {
     }
   })
 
+  // --- keep the scrubber clear of the sheet ------------------------------------------
+  // The sheet measures its own peek height (140-240px depending on the Now/Next card),
+  // so a hardcoded offset in scrubber.css would overlap it. Publish the real height and
+  // get the scrubber out of the way entirely once the sheet is expanded over it.
+  const sheetEl = document.getElementById('sheet')!
+  const scrubEl = document.getElementById('scrubber')!
+  const syncChrome = (): void => {
+    const detent = sheetEl.dataset['detent'] ?? 'peek'
+    if (detent === 'peek') {
+      // The sheet is taller than its peek and hangs below the fold, so measure the
+      // VISIBLE portion (viewport bottom minus its top), not its full height.
+      const r = sheetEl.getBoundingClientRect()
+      const h = Math.round(Math.max(0, window.innerHeight - r.top))
+      // Set on the element, not :root — scrubber.css declares --sheet-peek on `.scrub`,
+      // which would outrank a :root override.
+      scrubEl.style.setProperty('--sheet-peek', `${h}px`)
+      scrubEl.classList.remove('is-hidden')
+    } else {
+      scrubEl.classList.add('is-hidden')
+    }
+    // Tell the camera which part of the canvas is actually visible, so the campus is
+    // framed in the clear band between the top bar and the panels instead of behind them.
+    const topbarEl = document.getElementById('topbar')
+    const topPad = topbarEl && !topbarEl.hidden ? Math.round(topbarEl.getBoundingClientRect().height) : 0
+    const scrubTop = scrubEl.classList.contains('is-hidden')
+      ? window.innerHeight
+      : scrubEl.getBoundingClientRect().top
+    const bottomPad = Math.round(Math.max(0, window.innerHeight - scrubTop))
+    map.setPadding({ top: topPad + 8, bottom: bottomPad + 8, left: 8, right: 8 })
+  }
+  new ResizeObserver(syncChrome).observe(sheetEl)
+  new MutationObserver(syncChrome).observe(sheetEl, { attributes: true, attributeFilter: ['data-detent'] })
+  syncChrome()
+  frameCampus(map)
+
   renderPOIs(map, POIS, (poi) => {
     store.set({ selected: null })
     clearRoomPin(map)
