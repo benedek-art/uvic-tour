@@ -8,6 +8,7 @@
    Desktop is a progressive enhancement inside @media (min-width: 900px).
    ============================================================ */
 
+@import './fonts.css';
 @import './tokens.css';
 
 /* ------------------------------------------------------------

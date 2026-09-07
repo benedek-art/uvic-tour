@@ -5,7 +5,14 @@
  * single seam where they meet. Keep it declarative — logic belongs in the modules.
  */
 /// <reference types="vite/client" />
+/// <reference types="vite-plugin-pwa/client" />
 import './style.css'
+
+// Offline. Precaches the whole bundle — map geometry, walk graph, MapLibre and its
+// worker, the self-hosted fonts — so the app opens on campus with no signal.
+// `autoUpdate` in vite.config.ts means a new build takes over on the next visit.
+import { registerSW } from 'virtual:pwa-register'
+registerSW({ immediate: true })
 
 import { COURSES, SCHEDULE_BUILDINGS, type Day } from './data/schedule'
 import { POIS } from './data/pois'
@@ -116,13 +123,17 @@ async function main(): Promise<void> {
     }
     // Tell the camera which part of the canvas is actually visible, so the campus is
     // framed in the clear band between the top bar and the panels instead of behind them.
-    const topbarEl = document.getElementById('topbar')
-    const topPad = topbarEl && !topbarEl.hidden ? Math.round(topbarEl.getBoundingClientRect().height) : 0
-    const scrubTop = scrubEl.classList.contains('is-hidden')
-      ? window.innerHeight
-      : scrubEl.getBoundingClientRect().top
-    const bottomPad = Math.round(Math.max(0, window.innerHeight - scrubTop))
-    map.setPadding({ top: topPad + 8, bottom: bottomPad + 8, left: 8, right: 8 })
+    //
+    // Padding is derived from the RESTING (peek) layout only. Recomputing it as the sheet
+    // is dragged would shift the camera centre on every detent change and walk the view
+    // off the campus — the sheet expanding is a temporary overlay, not a new framing.
+    if (detent === 'peek') {
+      const topbarEl = document.getElementById('topbar')
+      const topPad = topbarEl && !topbarEl.hidden ? Math.round(topbarEl.getBoundingClientRect().height) : 0
+      const scrubTop = scrubEl.getBoundingClientRect().top
+      const bottomPad = Math.round(Math.max(0, window.innerHeight - scrubTop))
+      map.setPadding({ top: topPad + 8, bottom: bottomPad + 8, left: 8, right: 8 })
+    }
   }
   new ResizeObserver(syncChrome).observe(sheetEl)
   new MutationObserver(syncChrome).observe(sheetEl, { attributes: true, attributeFilter: ['data-detent'] })
