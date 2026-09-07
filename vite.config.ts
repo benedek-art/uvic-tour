@@ -11,6 +11,16 @@ export default defineConfig({
     include: ['tests/unit/**/*.test.ts'],
   },
   plugins: [
+    {
+      // Vite/rolldown only treat `.json` as data. Our baked campus geometry in
+      // src/data/generated/ uses the `.geojson` extension, so teach the pipeline
+      // to import it as a module. Types come from the sibling `*.geojson.d.ts`.
+      name: 'geojson-as-json',
+      transform(code: string, id: string) {
+        if (!id.split('?')[0]!.endsWith('.geojson')) return null
+        return { code: `export default ${code}`, map: null }
+      },
+    },
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['icons/*.png'],
