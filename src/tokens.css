@@ -1,0 +1,89 @@
+/* ============================================================
+   UVic Tour — design tokens. SINGLE SOURCE OF TRUTH.
+   Agents: import this, never edit it. Add component CSS elsewhere.
+   ============================================================ */
+:root {
+  /* --- palette (SPEC §4) --- */
+  --void:      #05070E;
+  --ground:    #0B1020;
+  --bldg:      #18213A;
+  --bldg-edge: #2E3E63;
+  --gold:      #FFB627;   /* RESERVED: the student's own class buildings ONLY */
+  --gold-dim:  #8A6318;
+  --cyan:      #4DD8E6;   /* tour stops / POIs */
+  --path:      #1E2E4D;
+  --route:     #FFD873;
+  --text:      #E8EDF7;
+  --text-dim:  #7C89A6;
+  --danger:    #FF6B5A;
+  --warn:      #FFA23A;
+
+  /* --- surfaces --- */
+  --glass:        rgba(11, 16, 32, .82);
+  --glass-border: rgba(120, 140, 190, .16);
+  --hairline:     rgba(120, 140, 190, .12);
+
+  /* --- type --- */
+  --font-display: 'Space Grotesk', ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-mono:    'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+
+  /* --- spacing (mobile-first scale) --- */
+  --s1: 4px;  --s2: 8px;  --s3: 12px; --s4: 16px;
+  --s5: 24px; --s6: 32px; --s7: 48px;
+  --radius:    14px;
+  --radius-sm: 9px;
+
+  /* --- motion --- */
+  --ease:      cubic-bezier(.22, 1, .36, 1);
+  --dur-fast:  140ms;
+  --dur:       220ms;
+  --dur-slow:  420ms;
+
+  /* --- safe areas (notch / home indicator) --- */
+  --safe-t: env(safe-area-inset-top, 0px);
+  --safe-b: env(safe-area-inset-bottom, 0px);
+  --safe-l: env(safe-area-inset-left, 0px);
+  --safe-r: env(safe-area-inset-right, 0px);
+
+  /* --- touch --- */
+  --tap: 44px;   /* minimum tap target. Never go below this. */
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root { --dur-fast: 0ms; --dur: 0ms; --dur-slow: 0ms; }
+  *, *::before, *::after {
+    animation-duration: .001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .001ms !important;
+  }
+}
+
+/* --- reset, mobile-first --- */
+* { box-sizing: border-box; }
+html, body {
+  margin: 0; padding: 0;
+  height: 100%;
+  background: var(--void);
+  color: var(--text);
+  font-family: var(--font-display);
+  -webkit-font-smoothing: antialiased;
+  overscroll-behavior: none;
+}
+body {
+  /* dvh, not vh — iOS Safari collapses its URL bar and vh lies */
+  height: 100dvh;
+  overflow: hidden;
+  -webkit-tap-highlight-color: transparent;
+}
+#app { position: relative; height: 100dvh; width: 100%; }
+#map { position: absolute; inset: 0; }
+
+button {
+  font: inherit; color: inherit; background: none; border: none;
+  cursor: pointer; min-height: var(--tap);
+  -webkit-tap-highlight-color: transparent;
+}
+.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+
+/* chrome must not be text-selectable on touch drag */
+#sheet, #scrubber, #topbar, #tour-overlay { user-select: none; -webkit-user-select: none; }
