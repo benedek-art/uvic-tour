@@ -58,46 +58,60 @@ export interface Route {
   minutes: number
 }
 
-/** Min-heap over node indices, keyed by an external f-score array. */
+/**
+ * Min-heap of (node, key) pairs.
+ *
+ * The key is stored with the entry rather than read from a mutable score array,
+ * so lowering a node's f-score never corrupts the ordering of entries already
+ * in the heap — we simply push a second, better entry and skip the stale one
+ * when it surfaces.
+ */
 class Heap {
-  private items: number[] = []
-  constructor(private readonly key: Float64Array) {}
+  private nodes: number[] = []
+  private keys: number[] = []
 
   get size(): number {
-    return this.items.length
+    return this.nodes.length
   }
 
-  push(node: number): void {
-    const a = this.items
-    a.push(node)
-    let i = a.length - 1
+  private swap(i: number, j: number): void {
+    const n = this.nodes[i]!
+    this.nodes[i] = this.nodes[j]!
+    this.nodes[j] = n
+    const k = this.keys[i]!
+    this.keys[i] = this.keys[j]!
+    this.keys[j] = k
+  }
+
+  push(node: number, key: number): void {
+    this.nodes.push(node)
+    this.keys.push(key)
+    let i = this.nodes.length - 1
     while (i > 0) {
       const parent = (i - 1) >> 1
-      if (this.key[a[parent]!]! <= this.key[a[i]!]!) break
-      const tmp = a[parent]!
-      a[parent] = a[i]!
-      a[i] = tmp
+      if (this.keys[parent]! <= this.keys[i]!) break
+      this.swap(parent, i)
       i = parent
     }
   }
 
   pop(): number {
-    const a = this.items
-    const top = a[0]!
-    const last = a.pop()!
-    if (a.length > 0) {
-      a[0] = last
+    const top = this.nodes[0]!
+    const lastNode = this.nodes.pop()!
+    const lastKey = this.keys.pop()!
+    const len = this.nodes.length
+    if (len > 0) {
+      this.nodes[0] = lastNode
+      this.keys[0] = lastKey
       let i = 0
       for (;;) {
         const l = 2 * i + 1
         const r = l + 1
         let small = i
-        if (l < a.length && this.key[a[l]!]! < this.key[a[small]!]!) small = l
-        if (r < a.length && this.key[a[r]!]! < this.key[a[small]!]!) small = r
+        if (l < len && this.keys[l]! < this.keys[small]!) small = l
+        if (r < len && this.keys[r]! < this.keys[small]!) small = r
         if (small === i) break
-        const tmp = a[small]!
-        a[small] = a[i]!
-        a[i] = tmp
+        this.swap(small, i)
         i = small
       }
     }
@@ -127,10 +141,10 @@ export function route(from: [number, number], to: [number, number]): Route | nul
   const goalNode = NODES[goal]!
   const h = (i: number): number => haversine(NODES[i]!, goalNode)
 
-  const open = new Heap(f)
+  const open = new Heap()
   g[start] = 0
   f[start] = h(start)
-  open.push(start)
+  open.push(start, f[start]!)
 
   let found = false
   while (open.size > 0) {
@@ -149,7 +163,7 @@ export function route(from: [number, number], to: [number, number]): Route | nul
         g[next] = tentative
         f[next] = tentative + h(next)
         cameFrom[next] = cur
-        open.push(next)
+        open.push(next, f[next]!)
       }
     }
   }
