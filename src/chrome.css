@@ -1,0 +1,60 @@
+/**
+ * Top bar shell.
+ *
+ * #map is `position: absolute; inset: 0`, so any static sibling paints *under* the
+ * canvas and its taps are swallowed by MapLibre. The bar must be positioned and
+ * stacked above it — but it must NOT become a full-width tap-blocker, or the user
+ * can't pan the map along the top of the screen. So the bar itself is transparent to
+ * pointers and only its actual controls take input.
+ */
+#topbar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 30;              /* above the map, below the tour overlay (40) */
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--s2);
+  padding: calc(var(--safe-t) + var(--s3)) calc(var(--safe-r) + var(--s3))
+           var(--s3) calc(var(--safe-l) + var(--s3));
+  pointer-events: none;     /* let map gestures pass through the empty areas */
+}
+
+#topbar > * {
+  pointer-events: auto;     /* ...but the controls themselves are tappable */
+}
+
+/* Boot overlay */
+#boot {
+  position: absolute;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: var(--s4);
+  background: var(--void);
+  transition: opacity var(--dur-slow) var(--ease);
+}
+#boot.is-gone { opacity: 0; }
+#boot p {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+.boot-mark {
+  width: 34px;
+  height: 34px;
+  border-radius: 6px;
+  background: var(--gold-dim);
+  animation: boot-pulse 1.4s var(--ease) infinite;
+}
+@keyframes boot-pulse {
+  0%, 100% { transform: rotate(45deg) scale(.82); opacity: .55; }
+  50%      { transform: rotate(45deg) scale(1);   opacity: 1; }
+}

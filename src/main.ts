@@ -7,6 +7,7 @@
 /// <reference types="vite/client" />
 /// <reference types="vite-plugin-pwa/client" />
 import './style.css'
+import './chrome.css'
 
 // Offline. Precaches the whole bundle — map geometry, walk graph, MapLibre and its
 // worker, the self-hosted fonts — so the app opens on campus with no signal.
@@ -29,6 +30,7 @@ import { createStore } from './ui/store'
 import { mountSheet, type AppState } from './ui/sheet'
 import { mountScrubber } from './ui/scrubber'
 import { mountLayerToggles } from './ui/layers'
+import { mountTourButton, startTour, stopTour } from './ui/tour'
 
 const WEEK = buildWeek(COURSES)
 
@@ -139,6 +141,28 @@ async function main(): Promise<void> {
   new MutationObserver(syncChrome).observe(sheetEl, { attributes: true, attributeFilter: ['data-detent'] })
   syncChrome()
   frameCampus(map)
+
+  // --- guided tour -------------------------------------------------------------------
+  const overlay = document.getElementById('tour-overlay')!
+  const chrome = [document.getElementById('sheet')!, scrubEl]
+  const setChromeHidden = (hidden: boolean): void => {
+    for (const el of chrome) el.classList.toggle('is-hidden', hidden)
+  }
+  mountTourButton(topbar, () => {
+    if (store.get().tourPlaying) { stopTour(); return }
+    store.set({ tourPlaying: true, selected: null })
+    clearRoomPin(map)
+    clearRoute(map)
+    setChromeHidden(true)
+    // Defer by a tick: the tour mounts a full-bleed cancel scrim, and the very click that
+    // started the tour would otherwise keep propagating straight into it and cancel.
+    setTimeout(() => startTour(map, overlay, () => {
+      store.set({ tourPlaying: false })
+      setChromeHidden(false)
+      syncChrome()
+      frameCampus(map)
+    }), 0)
+  })
 
   renderPOIs(map, POIS, (poi) => {
     store.set({ selected: null })

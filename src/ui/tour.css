@@ -1,0 +1,255 @@
+/* ============================================================
+   Cinematic tour mode — all CSS for src/ui/tour.ts lives here.
+
+   Tokens (src/tokens.css) are the single source of truth: there is not one raw
+   hex below. --gold is RESERVED for the student's own class buildings (SPEC §4),
+   so every piece of tour chrome here is --cyan or a neutral.
+
+   MOBILE FIRST, authored at 390x844. The card sits over the bottom third where a
+   thumb isn't, the Stop button sits clear of the notch, and the whole screen is a
+   tap target for "get me out of here". Desktop is the enhancement at the bottom.
+   ============================================================ */
+
+/* ------------------------------------------------------------
+   Launch button — appended into #topbar by mountTourButton().
+
+   Sized and finished to sit alongside .layer-toggle (src/map/map.css) since they
+   share the bar, but deliberately warmer: this is the button the whole app exists
+   to show off. inline-flex + align-self so it never stretches to the bar's width,
+   whatever layout the bar ends up using.
+   ------------------------------------------------------------ */
+
+.tour-launch {
+  display: inline-flex;
+  align-self: flex-start;
+  align-items: center;
+  gap: var(--s2);
+
+  min-height: var(--tap);
+  padding: 0 var(--s4);
+  margin: var(--s2) var(--s3) 0;
+
+  border: 1px solid var(--cyan);
+  border-radius: var(--radius);
+  background: var(--glass);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+
+  color: var(--text);
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+
+  transition:
+    border-color var(--dur-fast) var(--ease),
+    transform var(--dur-fast) var(--ease);
+}
+
+.tour-launch:hover { border-color: var(--text); }
+.tour-launch:active { transform: scale(0.97); }
+
+.tour-launch:focus-visible {
+  outline: 2px solid var(--cyan);
+  outline-offset: 2px;
+}
+
+/* A play triangle drawn in borders — no icon font, no SVG asset. */
+.tour-launch__icon {
+  flex: 0 0 auto;
+  width: 0;
+  height: 0;
+  border-left: 9px solid var(--cyan);
+  border-top: 6px solid transparent;
+  border-bottom: 6px solid transparent;
+  filter: drop-shadow(0 0 5px var(--cyan));
+  animation: tour-breathe 3200ms var(--ease) infinite;
+}
+
+/* tokens.css already flattens every animation under prefers-reduced-motion. */
+@keyframes tour-breathe {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.45; }
+}
+
+/* ------------------------------------------------------------
+   The overlay
+
+   #tour-overlay ships in index.html as a bare hidden div; tour.ts owns everything
+   inside it. Sits above the sheet (z 20) and the scrubber (z 8) so nothing pokes
+   through mid-flight.
+   ------------------------------------------------------------ */
+
+#tour-overlay.tour {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  /* The children opt back in. Keeps the layer itself out of hit-testing. */
+  pointer-events: none;
+}
+
+/* The tap-anywhere-to-exit surface, and the reason a stray drag can't fight the
+   camera while it is flying. Also darkens the top and bottom so white text sits on
+   something legible no matter which part of campus is underneath. */
+.tour__scrim {
+  position: absolute;
+  inset: 0;
+  pointer-events: auto;
+  cursor: pointer;
+  background:
+    linear-gradient(to bottom, var(--void), transparent 24%),
+    linear-gradient(to top, var(--void), transparent 46%);
+  opacity: 0.86;
+  animation: tour-fade-in var(--dur-slow) var(--ease) both;
+}
+
+@keyframes tour-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 0.86; }
+}
+
+/* ---------- Stop button ---------- */
+
+.tour__stop {
+  position: absolute;
+  top: calc(var(--safe-t) + var(--s3));
+  right: calc(var(--safe-r) + var(--s3));
+  pointer-events: auto;
+
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  /* Never smaller than a thumb, even with the short label. */
+  min-width: var(--tap);
+  min-height: var(--tap);
+  padding: 0 var(--s4);
+
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius);
+  background: var(--glass);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+
+  color: var(--text);
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+
+  transition: border-color var(--dur-fast) var(--ease);
+}
+
+.tour__stop:hover { border-color: var(--cyan); }
+
+.tour__stop:focus-visible {
+  outline: 2px solid var(--cyan);
+  outline-offset: 2px;
+}
+
+/* ---------- Narration card ---------- */
+
+.tour__card {
+  position: absolute;
+  left: calc(var(--safe-l) + var(--s4));
+  right: calc(var(--safe-r) + var(--s4));
+  bottom: calc(var(--safe-b) + var(--s6));
+  /* Text only — taps here fall through to the scrim and exit, as they should. */
+  pointer-events: none;
+
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+
+  opacity: 0;
+  transform: translateY(10px);
+  transition:
+    opacity var(--dur-slow) var(--ease),
+    transform var(--dur-slow) var(--ease);
+}
+
+/* Re-applied per stop by renderStop(), which is what makes stops cross-fade. */
+.tour__card.is-in {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.tour__meta {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+}
+
+.tour__count {
+  flex: 0 0 auto;
+  color: var(--cyan);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+}
+
+.tour__ticks {
+  display: flex;
+  flex: 1 1 auto;
+  gap: var(--s1);
+  align-items: center;
+}
+
+.tour__tick {
+  flex: 1 1 auto;
+  height: 2px;
+  border-radius: 99px;
+  background: var(--bldg-edge);
+  transition: background var(--dur) var(--ease);
+}
+
+.tour__tick.is-done { background: var(--cyan); }
+
+.tour__title {
+  margin: 0;
+  color: var(--text);
+  font-family: var(--font-display);
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.015em;
+  text-wrap: balance;
+}
+
+.tour__body {
+  margin: 0;
+  /* ~4 seconds of reading, and never a line long enough to lose your place. */
+  max-width: 42ch;
+  color: var(--text);
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 400;
+  line-height: 1.45;
+  text-wrap: pretty;
+}
+
+/* ------------------------------------------------------------
+   Desktop (>=900px) — more air, and the card holds the lower-left third
+   the way a title sequence would.
+   ------------------------------------------------------------ */
+
+@media (min-width: 900px) {
+  .tour-launch { font-size: 14px; }
+
+  .tour__stop {
+    top: calc(var(--safe-t) + var(--s5));
+    right: calc(var(--safe-r) + var(--s5));
+    font-size: 14px;
+  }
+
+  .tour__card {
+    left: calc(var(--safe-l) + var(--s7));
+    right: auto;
+    bottom: calc(var(--safe-b) + var(--s7));
+    width: min(46ch, 48vw);
+    gap: var(--s3);
+  }
+
+  .tour__title { font-size: 38px; }
+  .tour__body { font-size: 17px; }
+}

@@ -97,4 +97,30 @@ test.describe('UVic Tour', () => {
     await expect(scrub).toBeVisible()
     for (const d of ['MON', 'TUE', 'WED', 'THU', 'FRI']) await expect(scrub).toContainText(d)
   })
+
+  test('top bar controls are actually tappable, not covered by the map canvas', async ({ page }) => {
+    await boot(page)
+    // Regression: #topbar was unpositioned, so the absolutely-positioned MapLibre canvas
+    // painted over it and swallowed every tap. A JS .click() hid this; only a real
+    // hit-test catches it.
+    const btn = page.locator('.tour-launch').first()
+    await expect(btn).toBeVisible()
+    const box = (await btn.boundingBox())!
+    const topmost = await page.evaluate(([x, y]) => {
+      const el = document.elementFromPoint(x as number, y as number)
+      return el?.closest('.tour-launch') ? 'tour-launch' : (el?.tagName.toLowerCase() ?? 'none')
+    }, [box.x + box.width / 2, box.y + box.height / 2])
+    expect(topmost).toBe('tour-launch')
+  })
+
+  test('the guided tour starts from a real tap and can be stopped', async ({ page }) => {
+    await boot(page)
+    await page.locator('.tour-launch').first().click()
+    const overlay = page.locator('#tour-overlay')
+    await expect(overlay).toBeVisible({ timeout: 15_000 })
+    await expect(overlay).toContainText('1 / 8')
+    await page.keyboard.press('Escape')
+    await expect(overlay).toBeHidden({ timeout: 10_000 })
+    await expect(page.getByTestId('bottom-sheet')).toBeVisible()
+  })
 })

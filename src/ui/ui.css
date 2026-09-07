@@ -455,3 +455,11 @@
   .nn-code { font-size: 32px; }
   .nn-count-num { font-size: 34px; }
 }
+
+/* Guided tour takes over the screen: chrome steps aside. */
+#sheet.is-hidden {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(24px);
+  transition: opacity var(--dur) var(--ease), transform var(--dur) var(--ease);
+}
