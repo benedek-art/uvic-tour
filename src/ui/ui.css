@@ -1,0 +1,457 @@
+/* ============================================================
+   UVic Tour — sheet, Now/Next, class list, detail card.
+   Mobile-first: everything below is authored for a 390x844
+   phone. Desktop (>=900px) is the enhancement at the bottom.
+   Tokens come from src/tokens.css — never redeclare them here.
+   ============================================================ */
+
+/* ---------- the sheet ------------------------------------- */
+
+#sheet.sheet {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  height: 90dvh;
+  padding-left: var(--safe-l);
+  padding-right: var(--safe-r);
+  background: var(--glass);
+  backdrop-filter: blur(20px) saturate(140%);
+  -webkit-backdrop-filter: blur(20px) saturate(140%);
+  border-top: 1px solid var(--glass-border);
+  border-radius: var(--radius) var(--radius) 0 0;
+  box-shadow: 0 -18px 48px rgba(0, 0, 0, .55);
+  /* Driven by sheet.ts. A custom property, not an inline transform, so the
+     desktop rail can override it with plain CSS. */
+  transform: translateY(var(--sheet-y, 100%));
+  transition: transform var(--dur-slow) var(--ease);
+  will-change: transform;
+  contain: paint;
+}
+
+#sheet.is-dragging { transition: none; }
+
+.sheet-handle {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: var(--tap);          /* the grip is small; the target is not */
+  padding: 0;
+  /* ONLY here. On the sheet itself this would kill inner scrolling. */
+  touch-action: none;
+  cursor: grab;
+}
+.sheet-handle:active { cursor: grabbing; }
+
+.sheet-grip {
+  width: 44px;
+  height: 5px;
+  border-radius: 99px;
+  background: var(--bldg-edge);
+  transition: background var(--dur) var(--ease);
+}
+.sheet-handle:hover .sheet-grip,
+.sheet-handle:focus-visible .sheet-grip { background: var(--text-dim); }
+
+.sheet-scroll {
+  flex: 1 1 auto;
+  overflow: hidden;
+  padding: 0 var(--s4) calc(var(--s6) + var(--safe-b));
+}
+
+/* Inner scrolling only at the full detent — otherwise a drag on the content
+   would fight the sheet itself. */
+#sheet.is-full .sheet-scroll {
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+
+/* Several elements below set an explicit `display`, which outranks the UA's
+   `[hidden] { display: none }`. Restate it with weight so `el.hidden = true`
+   keeps working — the render code hides stale lines that way. */
+#sheet [hidden] { display: none !important; }
+
+/* ---------- Now / Next ------------------------------------ */
+
+.nn-card {
+  display: block;
+  width: 100%;
+  padding: var(--s2) 0 var(--s2);
+  text-align: left;
+}
+
+.nn { border-bottom: 1px solid var(--hairline); padding-bottom: var(--s4); }
+.nn-card:disabled { cursor: default; }
+
+.nn-top {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  min-height: 16px;
+}
+
+.nn-label {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  color: var(--gold);
+}
+
+.nn-badge {
+  display: inline-block;
+  font-size: 10px;
+  letter-spacing: .12em;
+  color: var(--void);
+  background: var(--text-dim);
+  border-radius: 99px;
+  padding: 2px 7px;
+}
+
+.nn-code {
+  display: block;
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -.01em;
+  margin-top: var(--s1);
+}
+
+.nn-title {
+  display: block;
+  font-size: 13px;
+  color: var(--text-dim);
+  margin-top: 2px;
+}
+
+.nn-where {
+  display: block;
+  font-size: 12px;
+  color: var(--text);
+  margin-top: var(--s2);
+  letter-spacing: .02em;
+}
+
+.nn-count {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s2);
+  margin-top: var(--s3);
+}
+
+.nn-count-num {
+  font-size: 30px;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--gold);
+  /* tabular figures: the countdown must not shuffle sideways as digits change */
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
+}
+
+.nn-count-label {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.nn-walk {
+  display: block;
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-top: var(--s2);
+}
+.nn-walk[data-kind='tight'] { color: var(--warn); }
+.nn-walk[data-kind='impossible'] { color: var(--danger); }
+
+.nn-note,
+.dc-note {
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text-dim);
+  margin: var(--s3) 0 0;
+  padding-left: var(--s3);
+  border-left: 2px solid var(--hairline);
+}
+.nn-note[data-kind='tight'],
+.dc-note[data-kind='tight'] { color: var(--warn); border-left-color: var(--warn); }
+.nn-note[data-kind='impossible'],
+.dc-note[data-kind='impossible'] { color: var(--danger); border-left-color: var(--danger); }
+
+/* ---------- class list ------------------------------------ */
+
+.cl { padding-top: var(--s4); }
+
+.cl-heading {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin: 0 0 var(--s2);
+}
+
+.cl-group { margin-bottom: var(--s3); }
+
+.cl-day {
+  font-size: 10px;
+  font-weight: 400;
+  letter-spacing: .18em;
+  color: var(--text-dim);
+  opacity: .7;
+  margin: var(--s3) 0 var(--s1);
+}
+
+.cl-row {
+  display: grid;
+  grid-template-columns: 3px 1fr auto;
+  align-items: center;
+  gap: var(--s3);
+  width: 100%;
+  min-height: 56px;            /* well over the 44px floor */
+  padding: var(--s2) 0;
+  text-align: left;
+  border-radius: var(--radius-sm);
+  transition: background var(--dur-fast) var(--ease);
+}
+.cl-row + .cl-row { border-top: 1px solid var(--hairline); }
+.cl-row:active { background: rgba(255, 182, 39, .07); }
+.cl-row.is-selected { background: rgba(255, 182, 39, .1); }
+
+.cl-rule {
+  align-self: stretch;
+  width: 3px;
+  min-height: 34px;
+  border-radius: 99px;
+  background: var(--gold-dim);
+  transition: background var(--dur-fast) var(--ease);
+}
+.cl-row.is-selected .cl-rule { background: var(--gold); }
+
+.cl-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.cl-code {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -.01em;
+}
+
+.cl-title {
+  font-size: 11.5px;
+  color: var(--text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cl-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
+  padding-right: var(--s1);
+}
+
+.cl-time {
+  font-size: 11px;
+  color: var(--text);
+  white-space: nowrap;
+}
+.cl-time[data-dark='true'] { color: var(--cyan); }
+
+.cl-room {
+  font-size: 10.5px;
+  letter-spacing: .06em;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+/* ---------- detail card ----------------------------------- */
+
+.dc {
+  display: block;
+  padding: var(--s4) 0 var(--s2);
+  border-bottom: 1px solid var(--hairline);
+  animation: dc-in var(--dur) var(--ease);
+}
+
+@keyframes dc-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: none; }
+}
+
+.dc-head {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s3);
+}
+
+.dc-head-text { min-width: 0; flex: 1 1 auto; }
+
+.dc-code {
+  font-size: 22px;
+  font-weight: 700;
+  margin: 0;
+  letter-spacing: -.01em;
+}
+
+.dc-section {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--text-dim);
+}
+
+.dc-title {
+  font-size: 12.5px;
+  color: var(--text-dim);
+  margin: 2px 0 0;
+}
+
+.dc-close {
+  flex: none;
+  width: var(--tap);
+  height: var(--tap);
+  margin: calc(var(--s2) * -1) calc(var(--s2) * -1) 0 0;
+  font-size: 15px;
+  color: var(--text-dim);
+  border-radius: 50%;
+}
+.dc-close:active { background: var(--hairline); color: var(--text); }
+
+.dc-meta {
+  display: grid;
+  gap: var(--s2);
+  margin: var(--s4) 0 0;
+}
+
+.dc-meta-row {
+  display: grid;
+  grid-template-columns: 46px 1fr;
+  gap: var(--s3);
+  align-items: baseline;
+}
+
+.dc-term {
+  font-size: 9.5px;
+  letter-spacing: .14em;
+  color: var(--text-dim);
+  margin: 0;
+}
+
+.dc-value {
+  font-size: 12.5px;
+  margin: 0;
+  color: var(--text);
+}
+
+/* the room decoder — SPEC §5.7. Deliberately the loudest block on the card. */
+.dc-decoder {
+  margin-top: var(--s4);
+  padding: var(--s3);
+  border: 1px solid var(--gold-dim);
+  border-radius: var(--radius-sm);
+  background: rgba(255, 182, 39, .05);
+}
+
+.dc-decoder-head {
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: .16em;
+  color: var(--gold);
+  margin: 0;
+}
+
+.dc-decoder-where {
+  font-size: 12px;
+  color: var(--text);
+  margin: var(--s2) 0 0;
+}
+
+.dc-decoder-entrance,
+.dc-decoder-directions,
+.dc-decoder-fallback {
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-dim);
+  margin: var(--s2) 0 0;
+}
+.dc-decoder-entrance strong { color: var(--text); font-weight: 600; }
+.dc-decoder-fallback { font-size: 11px; opacity: .75; }
+
+.dc-dark {
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--cyan);
+  margin: var(--s3) 0 0;
+}
+
+.dc-route-btn {
+  display: block;
+  width: 100%;
+  min-height: var(--tap);
+  margin-top: var(--s4);
+  padding: 0 var(--s4);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--gold);
+  border: 1px solid var(--gold-dim);
+  border-radius: var(--radius-sm);
+  background: rgba(255, 182, 39, .06);
+  transition: background var(--dur-fast) var(--ease);
+}
+.dc-route-btn:active { background: rgba(255, 182, 39, .16); }
+
+.dc-route-summary {
+  font-size: 12px;
+  color: var(--text-dim);
+  text-align: center;
+  margin: var(--s2) 0 0;
+}
+
+/* ---------- shared ---------------------------------------- */
+
+.sheet button:focus-visible,
+.sheet .cl-row:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+
+/* ---------- desktop: the left rail (SPEC §4) --------------- */
+
+@media (min-width: 900px) {
+  #sheet.sheet {
+    top: 0;
+    bottom: 0;
+    left: 0;
+    right: auto;
+    width: 380px;
+    height: 100dvh;
+    padding-top: var(--safe-t);
+    border-top: none;
+    border-right: 1px solid var(--glass-border);
+    border-radius: 0;
+    box-shadow: 18px 0 48px rgba(0, 0, 0, .45);
+    transform: none;              /* the detent translation is mobile-only */
+  }
+
+  .sheet-handle { display: none; }
+
+  .sheet-scroll {
+    overflow-y: auto;
+    padding-top: var(--s5);
+    padding-bottom: var(--s6);
+  }
+
+  .nn-code { font-size: 32px; }
+  .nn-count-num { font-size: 34px; }
+}

@@ -6,8 +6,11 @@
  * (see the `geojson-as-json` plugin in `vite.config.ts`).
  */
 
-import { Map as MapLibreMap } from 'maplibre-gl'
+import { Map as MapLibreMap, setWorkerUrl } from 'maplibre-gl'
+// @ts-ignore -- CSS side-effect import; see note in main.ts.
 import 'maplibre-gl/dist/maplibre-gl.css'
+// @ts-ignore -- Vite `?worker&url` import; `vite/client` types are not in tsconfig's `types` array.
+import maplibreWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url'
 
 import buildingsData from '../data/generated/buildings.geojson'
 // @ts-ignore -- paths.geojson has no sibling .d.ts (buildings.geojson does). The Vite
@@ -27,6 +30,23 @@ import {
   riseHeightExpression,
 } from './style'
 
+/**
+ * MapLibre 6 ships its GeoJSON/tile worker as a bare ESM file that imports a sibling
+ * chunk, and locates it with `new URL('./maplibre-gl-worker.mjs', import.meta.url)`.
+ * Neither half of that survives Vite:
+ *   - in dev, pre-bundling rewrites the URL to `/node_modules/.vite/deps/
+ *     maplibre-gl-worker.mjs`, which does not exist;
+ *   - in a production build, the raw worker is copied into `assets/` but its
+ *     `./maplibre-gl-shared.mjs` import is not emitted alongside it.
+ * Either way the worker never starts, no source ever finishes loading, the `load` event
+ * never fires, and the map sits on a black screen forever with no console error.
+ *
+ * `?worker&url` makes Vite bundle the worker properly and hand back a URL that is correct
+ * in both dev and prod. It also means the worker lands in `dist/assets/*.js`, which the
+ * PWA precache glob already covers — so it works offline too.
+ */
+setWorkerUrl(maplibreWorkerUrl as string)
+
 // --- camera constants --------------------------------------------------------------------
 
 /** SPEC §4: an illuminated model seen from a low oblique angle, not a top-down map. */
@@ -39,6 +59,17 @@ export const RISE_MS = 1400
 /** How far the camera pulls back / flattens before easing into the framed pose. */
 const ENTRY_ZOOM_OFFSET = 0.45
 const ENTRY_PITCH_OFFSET = 18
+
+/**
+ * `fitBounds` solves for a rectangle that fully contains the campus. At pitch 50 on a tall
+ * portrait phone the campus reads as a wide, shallow band, so an exact fit leaves the model
+ * marooned in the middle of the frame. These two numbers push it back up to something with
+ * presence: a little more zoom, and a downward nudge that leaves headroom at the top and
+ * keeps the campus clear of the bottom sheet that mounts later.
+ * Both were tuned against screenshots at 390x844.
+ */
+const FRAME_ZOOM_BOOST = 0.35
+const FRAME_PAN_Y = 20
 
 const MIN_ZOOM = 13.3
 const MAX_ZOOM = 18.5
@@ -120,17 +151,30 @@ function buildingExtent(): [[number, number], [number, number]] {
  * call is correct on a phone and on a desktop.
  */
 function computeHomeCamera(map: MapLibreMap): Camera {
+  // Solve the fit flat (pitch 0). Asking `fitBounds` to solve it *at* 50 degrees makes it
+  // fit the bounds inside the pitched trapezoid, which throws away roughly a zoom level
+  // and leaves the campus as a postage stamp in the middle of the screen.
   map.fitBounds(buildingExtent(), {
-    padding: { top: 56, bottom: 40, left: 20, right: 20 },
-    pitch: INITIAL_PITCH,
+    padding: { top: 12, bottom: 12, left: 12, right: 12 },
+    pitch: 0,
     bearing: INITIAL_BEARING,
-    maxZoom: 16.5,
+    maxZoom: 17,
     duration: 0,
   })
+
   const c = map.getCenter()
+  const center: [number, number] = [c.lng, c.lat]
+  const zoom = map.getZoom() + FRAME_ZOOM_BOOST
+
+  // Apply the pitch, then nudge so the model sits with headroom above and breathing room
+  // below rather than pinned dead-centre.
+  map.jumpTo({ center, zoom, pitch: INITIAL_PITCH, bearing: INITIAL_BEARING })
+  map.panBy([0, FRAME_PAN_Y], { duration: 0 })
+  const c2 = map.getCenter()
+
   return {
-    center: [c.lng, c.lat],
-    zoom: map.getZoom(),
+    center: [c2.lng, c2.lat],
+    zoom,
     pitch: INITIAL_PITCH,
     bearing: INITIAL_BEARING,
   }
@@ -255,7 +299,7 @@ export function playRiseAnimation(map: MapLibreMap): Promise<void> {
       const p = Math.min(1, (now - start) / RISE_MS)
       applyRise(map, easeOutCubic(p))
       // Paths come up first and fast, so the buildings rise out of a lit ground plan.
-      setLineOpacity(map, LAYER_PATHS, PATH_OPACITY * Math.min(1, p / 0.4))
+      setLineOpacity(map, LAYER_PATHS, PATH_OPACITY * Math.max(0, Math.min(1, p / 0.4)))
       if (p < 1) {
         requestAnimationFrame(frame)
       } else {

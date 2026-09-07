@@ -1,0 +1,204 @@
+/* ============================================================
+   UVic Tour — map overlay chrome: room pins, POI markers, layer toggles.
+
+   Owned by src/map/markers.ts and src/ui/layers.ts, which import this file.
+   Design tokens live in src/tokens.css and are the single source of truth —
+   never redefine a colour here, reference the custom property.
+
+   MOBILE FIRST: authored for a 390x844 phone. Every interactive element is at
+   least var(--tap) (44px) in both axes, achieved with a transparent padded hit
+   area around a much smaller visible dot. Fingers are imprecise; dots are not.
+
+   COLOUR RULE (SPEC §4): --gold belongs to the student's own class buildings.
+   Room pins are gold because they mark exactly that. POIs are --cyan, always.
+   ============================================================ */
+
+/* ------------------------------------------------------------
+   Room pin — "your class is in D287", pinned above the building.
+   Non-interactive on purpose: pointer-events: none means it can never
+   swallow a pan or pinch aimed at the map underneath it.
+   ------------------------------------------------------------ */
+
+.room-pin {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-select: none;
+  animation: room-pin-drop var(--dur-slow) var(--ease) both;
+}
+
+.room-pin__chip {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  line-height: 1;
+  color: var(--gold);
+  padding: 7px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--glass);
+  border: 1px solid var(--gold-dim);
+  box-shadow:
+    0 2px 14px rgba(0, 0, 0, 0.55),
+    0 0 18px rgba(255, 182, 39, 0.22);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  white-space: nowrap;
+}
+
+/* The line that ties the chip to the ground, so the label reads as *placed*. */
+.room-pin__stem {
+  width: 1px;
+  height: 14px;
+  background: linear-gradient(to bottom, var(--gold-dim), var(--gold));
+}
+
+.room-pin__dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--gold);
+  box-shadow:
+    0 0 0 3px rgba(255, 182, 39, 0.18),
+    0 0 16px 3px rgba(255, 182, 39, 0.55);
+}
+
+@keyframes room-pin-drop {
+  from {
+    opacity: 0;
+    transform: translateY(-12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ------------------------------------------------------------
+   POI marker — a tour stop. Cyan, smaller than a room pin, tappable.
+   ------------------------------------------------------------ */
+
+.poi-marker {
+  /* The whole button is the hit area; only the inner dot is visible. */
+  width: var(--tap);
+  height: var(--tap);
+  min-height: var(--tap);
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  -webkit-user-select: none;
+  transition: transform var(--dur-fast) var(--ease);
+}
+
+.poi-marker__dot {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: var(--cyan);
+  box-shadow:
+    0 0 0 2px rgba(11, 16, 32, 0.9),
+    0 0 0 3px rgba(77, 216, 230, 0.35),
+    0 0 14px 2px rgba(77, 216, 230, 0.5);
+  transition: transform var(--dur-fast) var(--ease);
+}
+
+.poi-marker:active .poi-marker__dot,
+.poi-marker[aria-pressed='true'] .poi-marker__dot {
+  transform: scale(1.45);
+}
+
+.poi-marker:focus-visible {
+  outline: none;
+}
+
+.poi-marker:focus-visible .poi-marker__dot {
+  box-shadow:
+    0 0 0 2px var(--void),
+    0 0 0 4px var(--cyan);
+}
+
+/* ------------------------------------------------------------
+   Layer toggles — "show me the tour stops / show me the paths".
+   Laid out as an inline group; the owning panel decides where it sits
+   on screen, so nothing here is absolutely positioned.
+   ------------------------------------------------------------ */
+
+.layer-toggles {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--s2);
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.layer-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  min-height: var(--tap);
+  padding: 0 var(--s3);
+  border-radius: var(--radius);
+  border: 1px solid var(--glass-border);
+  background: var(--glass);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  color: var(--text-dim);
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  transition:
+    color var(--dur-fast) var(--ease),
+    border-color var(--dur-fast) var(--ease);
+}
+
+/* The little status lamp. Off = a dim outline, on = lit in the layer's colour. */
+.layer-toggle__lamp {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px var(--text-dim);
+  transition:
+    background var(--dur-fast) var(--ease),
+    box-shadow var(--dur-fast) var(--ease);
+}
+
+.layer-toggle[aria-pressed='true'] {
+  color: var(--text);
+  border-color: rgba(120, 140, 190, 0.3);
+}
+
+.layer-toggle[data-layer='pois'][aria-pressed='true'] .layer-toggle__lamp {
+  background: var(--cyan);
+  box-shadow: 0 0 10px 1px rgba(77, 216, 230, 0.7);
+}
+
+.layer-toggle[data-layer='paths'][aria-pressed='true'] .layer-toggle__lamp {
+  background: var(--text-dim);
+  box-shadow: 0 0 8px 1px rgba(124, 137, 166, 0.55);
+}
+
+.layer-toggle:focus-visible {
+  outline: 2px solid var(--cyan);
+  outline-offset: 2px;
+}
+
+/* Desktop: the toggles sit top-right with room to breathe (SPEC §4 Layout). */
+@media (min-width: 900px) {
+  .layer-toggle {
+    font-size: 14px;
+    padding: 0 var(--s4);
+  }
+}
