@@ -5,6 +5,13 @@
  * five seconds with no tapping. So this card is the first thing in the sheet, it is
  * visible at the peek detent, and it never asks for input.
  *
+ * It is also the ONLY thing visible at the peek detent (docs/REDESIGN.md §2): one
+ * answer, and one filled terracotta button — "Take me there" — which draws the walk
+ * on the map without covering it. The type ladder is the design: countdown 36 px,
+ * building 21 px, everything else 13-14 px, because a first-year needs *how long*
+ * and *where*, in that order. The course code and title are demoted to a single
+ * quiet line; they name nothing anyone can walk to.
+ *
  * It renders every `NowState` variant from `src/core/week.ts`, plus the scrubbed
  * variant (when `state.scrubMinutes` is set the live clock is overridden). The
  * countdown re-writes a single text node once a second — the card's structure is
@@ -82,15 +89,28 @@ export function homeWalkLine(session: Session): string | null {
   return `${walk.minutes} min from home · leave by ${minutesToHHMM(session.start - walk.minutes)}`
 }
 
-/** Short building tags. Full names are too wide for a 390 px row. */
-export const SHORT_BUILDING: Record<string, string> = {
-  'Bob Wright Centre': 'BWC',
-  'MacLaurin Building': 'MACL',
-  'Engineering/Computer Science Building': 'ECS',
+/**
+ * Building names as a human would say them out loud.
+ *
+ * The old code showed `BWC B150`. To someone who has never been on campus that is
+ * two pieces of undecoded jargon: they cannot ask a stranger for "BWC", and they
+ * cannot read it off a sign. The OSM name is the truth, but one of the three is a
+ * 37-character mouthful, so it gets an ampersand and loses the word "Building".
+ * Everything the student must *say* or *look for* is spelled out.
+ */
+export const BUILDING_NAME: Record<string, string> = {
+  'Bob Wright Centre': 'Bob Wright Centre',
+  'MacLaurin Building': 'MacLaurin Building',
+  'Engineering/Computer Science Building': 'Engineering & Computer Science',
 }
 
-export function shortBuilding(name: string): string {
-  return SHORT_BUILDING[name] ?? name.slice(0, 4).toUpperCase()
+export function friendlyBuilding(name: string): string {
+  return BUILDING_NAME[name] ?? name
+}
+
+/** `Room B150` — the word matters; a bare `B150` is a code, not a place. */
+export function roomLabel(room: string): string {
+  return `Room ${room}`
 }
 
 /** `08:30–09:50`, en dash, mono-friendly. */
@@ -241,13 +261,20 @@ function pad2(n: number): string {
   return n < 10 ? `0${n}` : String(n)
 }
 
-/** `28:14`, or `1:28:14` once an hour is involved. Never negative. */
+/**
+ * `28:14` under the hour, `1h 28m` over it. Never negative.
+ *
+ * `1:28:14` is a stopwatch, and a stopwatch has to be decoded: is that one hour or
+ * one minute? Over an hour the seconds are noise anyway, so the units are spelled
+ * out and the digits stop twitching. Under an hour mm:ss is unambiguous and the
+ * ticking is the point — that is when leaving on time starts to matter.
+ */
 function clockText(totalSeconds: number): string {
   const s = Math.max(0, Math.floor(totalSeconds))
   const h = Math.floor(s / 3600)
   const m = Math.floor((s % 3600) / 60)
   const sec = s % 60
-  return h > 0 ? `${h}:${pad2(m)}:${pad2(sec)}` : `${pad2(m)}:${pad2(sec)}`
+  return h > 0 ? `${h}h ${pad2(m)}m` : `${pad2(m)}:${pad2(sec)}`
 }
 
 function el<K extends keyof HTMLElementTagNameMap>(
@@ -264,6 +291,11 @@ function el<K extends keyof HTMLElementTagNameMap>(
 export interface NowNextDeps {
   store: Store<AppState>
   onSelect: (s: Session | null) => void
+  /**
+   * The one big button. Optional so the card can be mounted bare in a unit test;
+   * `mountSheet` always wires it to the map's route drawing.
+   */
+  onGo?: (s: Session) => void
 }
 
 export interface NowNextView {
@@ -272,58 +304,92 @@ export interface NowNextView {
    * `ownsTransitionNote` — when true this card carries the single
    * `data-testid="transition-note"` on the page. The detail card takes it over the
    * moment a class is selected, so exactly one such element ever exists.
+   *
+   * Returns true when the card's *structure* was rebuilt (not just the ticking
+   * countdown). The sheet re-measures its peek detent on that, because a two-line
+   * building name is taller than a one-line one and a stale peek height clips the
+   * button off the bottom of the card.
    */
-  update(state: AppState, ownsTransitionNote: boolean): void
+  update(state: AppState, ownsTransitionNote: boolean): boolean
 }
 
 /**
  * Create the Now/Next card.
  *
- * Tapping the card selects the session it is describing, which is the shortest path
- * from "cold open" to "fly me there".
+ * The hierarchy is deliberate and it is the whole design (docs/REDESIGN.md §2). A
+ * first-year between classes asks two questions, in this order: *how long have I
+ * got*, and *where am I going*. So the countdown is the largest thing on the card
+ * and the building name is second; the course code and title — which they already
+ * know, and which name nothing they can walk to — are demoted to one quiet line.
+ *
+ * Below that sits one filled terracotta button, "Take me there". It is the only
+ * coloured surface at the peek detent, so there is never a question about what to
+ * press. Everything above it is a single quiet tap target that opens the full detail
+ * (the room decoder lives there), which is why the building name carries a chevron.
  */
 export function createNowNext(deps: NowNextDeps): NowNextView {
   const root = el('section', 'nn')
   root.setAttribute('data-testid', 'now-next')
 
-  const card = el('button', 'nn-card')
-  card.type = 'button'
+  const card = el('div', 'nn-card')
   root.append(card)
 
-  // Everything inside the button is a <span>: a <button>'s content model is phrasing
-  // content, and ui.css gives these spans block layout.
+  // The information block is one big quiet button: tapping anywhere on it opens the
+  // class in full. It is a <button>, so everything inside it is a <span> — a button's
+  // content model is phrasing content — and ui.css gives those spans block layout.
+  const open = el('button', 'nn-open')
+  open.type = 'button'
+
   const label = el('span', 'nn-label')
   const badge = el('span', 'nn-badge mono')
   const top = el('span', 'nn-top')
   top.append(label, badge)
 
-  const code = el('span', 'nn-code')
-  const title = el('span', 'nn-title')
-  const where = el('span', 'nn-where mono')
   const countNum = el('span', 'nn-count-num mono')
   const countLabel = el('span', 'nn-count-label')
   const count = el('span', 'nn-count')
   count.append(countNum, countLabel)
-  const walk = el('span', 'nn-walk mono')
-  const note = el('p', 'nn-note')
 
-  card.append(top, code, title, where, count, walk)
+  const placeName = el('span', 'nn-place-name')
+  const chevron = el('span', 'nn-chev')
+  chevron.setAttribute('aria-hidden', 'true')
+  chevron.textContent = '›'
+  const place = el('span', 'nn-place')
+  place.append(placeName, chevron)
+
+  const room = el('span', 'nn-room mono')
+  const walk = el('span', 'nn-walk mono')
+
+  open.append(top, count, place, room, walk)
+
+  const go = el('button', 'nn-go')
+  go.type = 'button'
+  go.textContent = 'Take me there'
+
+  card.append(open, go)
+
+  const note = el('p', 'nn-note')
   root.append(note)
 
   /** Structure is only rebuilt when this changes; the countdown updates in place. */
   let shape = ''
   let subject: Session | null = null
 
-  card.addEventListener('click', () => {
+  open.addEventListener('click', () => {
     if (!subject) return
     deps.store.set({ selected: subject })
     deps.onSelect(subject)
   })
 
-  function update(state: AppState, ownsTransitionNote: boolean): void {
+  go.addEventListener('click', () => {
+    if (!subject) return
+    deps.onGo?.(subject)
+  })
+
+  function update(state: AppState, ownsTransitionNote: boolean): boolean {
     const focus = resolveFocus(state)
     subject = focus.session
-    card.disabled = subject === null
+    open.disabled = subject === null
 
     const session = focus.session
     const dark = session ? endsAfterDark(session, state.now) : false
@@ -337,38 +403,55 @@ export function createNowNext(deps: NowNextDeps): NowNextView {
       session?.day ?? '-',
       dark ? 'dark' : 'day',
       ownsTransitionNote ? 'note' : 'quiet',
+      focus.scrubbing ? 'scrub' : 'live',
+      state.selected ? 'picked' : 'open',
     ].join('|')
 
+    let rebuilt = false
     if (nextShape !== shape) {
+      rebuilt = true
       shape = nextShape
       root.dataset['kind'] = kind
 
+      // Plain words. "IN CLASS NOW", not "NOW"; "YOUR NEXT CLASS", not "NEXT UP".
+      // `TERM STARTS …` is uppercase in the string itself because a unit test reads
+      // textContent, which never sees `text-transform`.
       label.textContent =
         kind === 'in-class'
-          ? 'NOW'
+          ? 'IN CLASS NOW'
           : kind === 'before-next'
-            ? 'NEXT UP'
+            ? 'YOUR NEXT CLASS'
             : kind === 'pre-term'
               ? `TERM STARTS ${termStartLabel()}`
-              : dayDoneLabel(state.now, session)
+              : session
+                ? `NEXT CLASS ${dayDoneLabel(state.now, session)}`
+                : dayDoneLabel(state.now, session)
 
-      badge.textContent = focus.scrubbing ? 'SCRUBBING' : ''
+      badge.textContent = focus.scrubbing ? 'PREVIEW' : ''
       badge.hidden = !focus.scrubbing
 
       if (session) {
-        code.textContent = session.course.code
-        title.textContent = session.course.title
-        where.textContent = `${shortBuilding(session.course.building)} ${session.course.room} · ${timeRange(session.start, session.end)}${dark ? ' 🌙' : ''}`
-        where.hidden = false
-        title.hidden = false
-        code.hidden = false
+        // The place, loud. The course code and the clock, quiet and on one line.
+        placeName.textContent = friendlyBuilding(session.course.building)
+        place.hidden = false
+        room.textContent = `${roomLabel(session.course.room)} · ${session.course.code} · ${timeRange(session.start, session.end)}${dark ? ' 🌙' : ''}`
+        room.hidden = false
+        open.setAttribute(
+          'aria-label',
+          `${session.course.code}, ${friendlyBuilding(session.course.building)}, ${roomLabel(session.course.room)}. Open the details.`,
+        )
       } else {
-        code.textContent = 'No classes left'
-        title.textContent = 'The Fall 2026 term is over. Go outside.'
-        where.hidden = true
-        title.hidden = false
-        code.hidden = false
+        placeName.textContent = 'No classes left'
+        place.hidden = false
+        room.textContent = 'The Fall 2026 term is over. Go outside.'
+        room.hidden = false
+        open.removeAttribute('aria-label')
       }
+
+      // Fewer things visible at once (docs/REDESIGN.md §2.3). Selecting a class opens
+      // the detail card, which carries its own primary walk button; two filled
+      // terracotta buttons in one scroll is two answers to "what do I press?".
+      go.hidden = session === null || state.selected !== null
 
       // Walk line: only meaningful when a real walk stands between you and this class.
       // Three origins, in order — the class before it, the same building, or home.
@@ -414,11 +497,13 @@ export function createNowNext(deps: NowNextDeps): NowNextView {
       count.hidden = false
     } else if (session) {
       countNum.textContent = `${session.day.toUpperCase()} ${minutesToHHMM(session.start)}`
-      countLabel.textContent = kind === 'pre-term' ? 'first class of the term' : 'next class'
+      countLabel.textContent = kind === 'pre-term' ? 'your first class' : 'next class'
       count.hidden = false
     } else {
       count.hidden = true
     }
+
+    return rebuilt
   }
 
   return { el: root, update }

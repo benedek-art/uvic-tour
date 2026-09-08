@@ -1,8 +1,19 @@
 /* ============================================================
    UVic Tour — sheet, Now/Next, class list, detail card.
+
    Mobile-first: everything below is authored for a 390x844
    phone. Desktop (>=900px) is the enhancement at the bottom.
-   Tokens come from src/tokens.css — never redeclare them here.
+   Tokens come from src/tokens.css — never redeclare them here,
+   and never write a raw hex: translucency is mixed FROM a token
+   with color-mix() so the palette stays single-source.
+
+   THEME: warm paper (docs/REDESIGN.md §1). Depth comes from soft
+   shadows and hairlines, never from glows — a `0 0 Npx` shadow
+   reads as a smudge on a light ground, so there are none here.
+
+   HIERARCHY (docs/REDESIGN.md §2): the peek detent shows one
+   answer and one button. The button is the only filled, coloured
+   surface on the whole sheet; everything else is paper and ink.
    ============================================================ */
 
 /* ---------- the sheet ------------------------------------- */
@@ -21,12 +32,20 @@
   height: calc(90dvh + var(--sheet-over, 0px));
   padding-left: var(--safe-l);
   padding-right: var(--safe-r);
-  background: var(--glass);
-  backdrop-filter: blur(20px) saturate(140%);
-  -webkit-backdrop-filter: blur(20px) saturate(140%);
+  /* Glass over paper. `--glass` alone is 90% opaque, which was enough over a dark
+     map and is not enough over a light one: a terracotta building read straight
+     through the card and made it look broken. Painting the glass on top of a
+     partly-opaque `--void` takes the stack to ~98% — the map is still faintly
+     there, the ink is crisp. Both layers are mixed from tokens, no raw colour. */
+  background-color: color-mix(in srgb, var(--void) 78%, transparent);
+  background-image: linear-gradient(var(--glass), var(--glass));
+  backdrop-filter: blur(20px) saturate(120%);
+  -webkit-backdrop-filter: blur(20px) saturate(120%);
   border-top: 1px solid var(--glass-border);
   border-radius: var(--radius) var(--radius) 0 0;
-  box-shadow: 0 -18px 48px rgba(0, 0, 0, .55);
+  /* Upward, soft, warm. Same family as --shadow, negative Y because the light on
+     paper comes from above and this card is lifting off the map. */
+  box-shadow: 0 -12px 32px color-mix(in srgb, var(--text) 11%, transparent);
   /* Driven by sheet.ts. A custom property, not an inline transform, so the
      desktop rail can override it with plain CSS. */
   transform: translateY(var(--sheet-y, 100%));
@@ -112,23 +131,40 @@
    keeps working — the render code hides stale lines that way. */
 #sheet [hidden] { display: none !important; }
 
-/* ---------- Now / Next ------------------------------------ */
+/* ---------- Now / Next: the answer, and the one button -----
+   Type sizes are the design. Countdown 36 > place 21 > everything else 13-14,
+   because the two things a first-year needs are HOW LONG and WHERE. The course
+   code and title name nothing they can walk to, so they sit on the quiet line. */
+
+.nn { padding-bottom: var(--s4); }
 
 .nn-card {
   display: block;
   width: 100%;
-  padding: var(--s2) 0 var(--s2);
-  text-align: left;
+  /* The home indicator eats the bottom of the screen, and the peek detent is
+     measured from THIS element (sheet.ts `peekHeight`) — so the safe area has to be
+     inside the measurement or the primary button ends up under the indicator. */
+  padding: var(--s1) 0 calc(var(--s1) + var(--safe-b));
 }
 
-.nn { border-bottom: 1px solid var(--hairline); padding-bottom: var(--s4); }
-.nn-card:disabled { cursor: default; }
+/* The whole information block is one quiet tap target: it opens the class in full,
+   where the room decoder lives. It carries no button chrome at all — the only thing
+   on this card that looks pressable is the terracotta one. */
+.nn-open {
+  display: block;
+  width: 100%;
+  padding: 0;
+  text-align: left;
+  min-height: 0;
+}
+.nn-open:disabled { cursor: default; }
+.nn-open:not(:disabled):active .nn-place-name { color: var(--gold); }
 
 .nn-top {
   display: flex;
   align-items: center;
   gap: var(--s2);
-  min-height: 16px;
+  min-height: 15px;
 }
 
 .nn-label {
@@ -137,7 +173,7 @@
   font-weight: 600;
   letter-spacing: .16em;
   text-transform: uppercase;
-  color: var(--gold);
+  color: var(--text-dim);
 }
 
 .nn-badge {
@@ -150,69 +186,107 @@
   padding: 2px 7px;
 }
 
-.nn-code {
-  display: block;
-  font-size: 28px;
-  font-weight: 700;
-  line-height: 1.1;
-  letter-spacing: -.01em;
-  margin-top: var(--s1);
-}
-
-.nn-title {
-  display: block;
-  font-size: 13px;
-  color: var(--text-dim);
-  margin-top: 2px;
-}
-
-.nn-where {
-  display: block;
-  font-size: 12px;
-  color: var(--text);
-  margin-top: var(--s2);
-  letter-spacing: .02em;
-}
-
 .nn-count {
   display: flex;
   align-items: baseline;
   gap: var(--s2);
-  margin-top: var(--s3);
+  margin-top: var(--s1);
 }
 
 .nn-count-num {
-  font-size: 30px;
+  font-size: 36px;
   font-weight: 600;
   line-height: 1;
-  color: var(--gold);
+  letter-spacing: -.02em;
+  color: var(--text);
   /* tabular figures: the countdown must not shuffle sideways as digits change */
   font-variant-numeric: tabular-nums;
   font-feature-settings: 'tnum' 1;
 }
 
 .nn-count-label {
-  font-size: 12px;
+  font-size: 13px;
   color: var(--text-dim);
+}
+
+/* The place. Second-largest thing on the card and the only wrapping line. */
+.nn-place {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s1);
+  margin-top: var(--s2);
+}
+
+.nn-place-name {
+  font-size: 21px;
+  font-weight: 600;
+  line-height: 1.15;
+  letter-spacing: -.01em;
+  color: var(--text);
+  transition: color var(--dur-fast) var(--ease);
+}
+
+/* The only hint that the block above the button is tappable. */
+.nn-chev {
+  flex: none;
+  font-size: 20px;
+  line-height: 1;
+  color: var(--bldg-edge);
+}
+.nn-open:disabled .nn-chev { display: none; }
+
+.nn-room {
+  display: block;
+  font-size: 13px;
+  color: var(--text-dim);
+  margin-top: var(--s1);
+  letter-spacing: .01em;
 }
 
 .nn-walk {
   display: block;
-  font-size: 12px;
-  color: var(--text-dim);
+  font-size: 13.5px;
+  color: var(--text);
   margin-top: var(--s2);
 }
 .nn-walk[data-kind='tight'] { color: var(--warn); }
 .nn-walk[data-kind='impossible'] { color: var(--danger); }
 
+/* ---------- the primary action ---------------------------------------------
+   One button, full width, filled terracotta, plain words. It is the only coloured
+   fill anywhere in the sheet, so "what do I press?" has exactly one answer.
+   The fill is nudged 10% toward ink so paper-coloured label text clears 4.5:1 —
+   the token itself is locked, and mixing keeps it a single source. */
+
+.nn-go {
+  display: block;
+  width: 100%;
+  min-height: 52px;
+  margin-top: var(--s3);
+  padding: 0 var(--s4);
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: .01em;
+  color: var(--void);
+  background: color-mix(in srgb, var(--gold) 90%, var(--text));
+  border: none;
+  border-radius: var(--radius-sm);
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--gold) 26%, transparent);
+  transition: background var(--dur-fast) var(--ease), transform var(--dur-fast) var(--ease);
+}
+.nn-go:active {
+  background: color-mix(in srgb, var(--gold) 72%, var(--text));
+  transform: translateY(1px);
+}
+
 .nn-note,
 .dc-note {
-  font-size: 12.5px;
+  font-size: 13px;
   line-height: 1.45;
   color: var(--text-dim);
-  margin: var(--s3) 0 0;
+  margin: var(--s4) 0 0;
   padding-left: var(--s3);
-  border-left: 2px solid var(--hairline);
+  border-left: 2px solid var(--glass-border);
 }
 .nn-note[data-kind='tight'],
 .dc-note[data-kind='tight'] { color: var(--warn); border-left-color: var(--warn); }
@@ -221,26 +295,24 @@
 
 /* ---------- class list ------------------------------------ */
 
-.cl { padding-top: var(--s4); }
+.cl { padding-top: var(--s5); border-top: 1px solid var(--hairline); margin-top: var(--s4); }
 
 .cl-heading {
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: .16em;
-  text-transform: uppercase;
-  color: var(--text-dim);
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -.01em;
+  color: var(--text);
   margin: 0 0 var(--s2);
 }
 
 .cl-group { margin-bottom: var(--s3); }
 
 .cl-day {
-  font-size: 10px;
-  font-weight: 400;
+  font-size: 10.5px;
+  font-weight: 500;
   letter-spacing: .18em;
   color: var(--text-dim);
-  opacity: .7;
-  margin: var(--s3) 0 var(--s1);
+  margin: var(--s4) 0 var(--s1);
 }
 
 .cl-row {
@@ -249,20 +321,20 @@
   align-items: center;
   gap: var(--s3);
   width: 100%;
-  min-height: 56px;            /* well over the 44px floor */
-  padding: var(--s2) 0;
+  min-height: 68px;            /* well over the 44px floor */
+  padding: var(--s2) var(--s2) var(--s2) 0;
   text-align: left;
   border-radius: var(--radius-sm);
   transition: background var(--dur-fast) var(--ease);
 }
 .cl-row + .cl-row { border-top: 1px solid var(--hairline); }
-.cl-row:active { background: rgba(255, 182, 39, .07); }
-.cl-row.is-selected { background: rgba(255, 182, 39, .1); }
+.cl-row:active { background: color-mix(in srgb, var(--gold) 9%, transparent); }
+.cl-row.is-selected { background: color-mix(in srgb, var(--gold) 11%, transparent); }
 
 .cl-rule {
   align-self: stretch;
   width: 3px;
-  min-height: 34px;
+  min-height: 40px;
   border-radius: 99px;
   background: var(--gold-dim);
   transition: background var(--dur-fast) var(--ease);
@@ -272,14 +344,25 @@
 .cl-main {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 1px;
   min-width: 0;
 }
 
 .cl-code {
-  font-size: 15px;
-  font-weight: 600;
+  font-size: 16px;
+  font-weight: 700;
   letter-spacing: -.01em;
+  color: var(--text);
+}
+
+/* The building, not a four-letter tag. This is the only part of a row that names
+   somewhere the student can walk to, so it outranks the course title. */
+.cl-where {
+  font-size: 13.5px;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .cl-title {
@@ -295,19 +378,24 @@
   flex-direction: column;
   align-items: flex-end;
   gap: 3px;
-  padding-right: var(--s1);
+}
+
+.cl-days {
+  font-size: 10px;
+  letter-spacing: .12em;
+  color: var(--text-dim);
+  white-space: nowrap;
 }
 
 .cl-time {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--text);
   white-space: nowrap;
 }
 .cl-time[data-dark='true'] { color: var(--cyan); }
 
 .cl-room {
-  font-size: 10.5px;
-  letter-spacing: .06em;
+  font-size: 11.5px;
   color: var(--text-dim);
   white-space: nowrap;
 }
@@ -335,14 +423,15 @@
 .dc-head-text { min-width: 0; flex: 1 1 auto; }
 
 .dc-code {
-  font-size: 22px;
-  font-weight: 700;
+  font-size: 15px;
+  font-weight: 600;
   margin: 0;
+  color: var(--text-dim);
   letter-spacing: -.01em;
 }
 
 .dc-section {
-  font-size: 12px;
+  font-size: 11.5px;
   font-weight: 400;
   color: var(--text-dim);
 }
@@ -350,65 +439,64 @@
 .dc-title {
   font-size: 12.5px;
   color: var(--text-dim);
-  margin: 2px 0 0;
+  margin: 1px 0 0;
 }
 
 .dc-close {
   flex: none;
+  display: grid;
+  place-items: center;
   width: var(--tap);
   height: var(--tap);
   margin: calc(var(--s2) * -1) calc(var(--s2) * -1) 0 0;
-  font-size: 15px;
+  font-size: 16px;
   color: var(--text-dim);
+  border: 1px solid var(--glass-border);
   border-radius: 50%;
 }
 .dc-close:active { background: var(--hairline); color: var(--text); }
 
-.dc-meta {
-  display: grid;
-  gap: var(--s2);
-  margin: var(--s4) 0 0;
-}
+/* The answer to "where do I go", in the same voice as the hero card. */
+.dc-place { margin-top: var(--s3); }
 
-.dc-meta-row {
-  display: grid;
-  grid-template-columns: 46px 1fr;
-  gap: var(--s3);
-  align-items: baseline;
-}
-
-.dc-term {
-  font-size: 9.5px;
-  letter-spacing: .14em;
-  color: var(--text-dim);
-  margin: 0;
-}
-
-.dc-value {
-  font-size: 12.5px;
-  margin: 0;
+.dc-place-name {
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -.01em;
   color: var(--text);
+  margin: 0;
 }
 
-/* the room decoder — SPEC §5.7. Deliberately the loudest block on the card. */
+.dc-place-room {
+  font-size: 13.5px;
+  color: var(--text-dim);
+  margin: var(--s1) 0 0;
+}
+
+/* the room decoder — SPEC §5.7, and the single most useful block in the app for
+   someone who has never been inside the building. Deliberately the loudest thing
+   on this card: a terracotta-tinted callout, full-width, immediately under the
+   place it decodes. */
 .dc-decoder {
   margin-top: var(--s4);
-  padding: var(--s3);
+  padding: var(--s4);
   border: 1px solid var(--gold-dim);
-  border-radius: var(--radius-sm);
-  background: rgba(255, 182, 39, .05);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--gold) 7%, transparent);
 }
 
 .dc-decoder-head {
-  font-size: 9.5px;
-  font-weight: 600;
-  letter-spacing: .16em;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -.005em;
   color: var(--gold);
   margin: 0;
 }
 
 .dc-decoder-where {
-  font-size: 12px;
+  font-size: 13.5px;
+  font-weight: 500;
   color: var(--text);
   margin: var(--s2) 0 0;
 }
@@ -416,42 +504,78 @@
 .dc-decoder-entrance,
 .dc-decoder-directions,
 .dc-decoder-fallback {
-  font-size: 12.5px;
+  font-size: 14px;
   line-height: 1.5;
-  color: var(--text-dim);
+  color: var(--text);
   margin: var(--s2) 0 0;
 }
-.dc-decoder-entrance strong { color: var(--text); font-weight: 600; }
-.dc-decoder-fallback { font-size: 11px; opacity: .75; }
+.dc-decoder-entrance strong { color: var(--text); font-weight: 700; }
+.dc-decoder-directions { color: var(--text-dim); }
+.dc-decoder-fallback { font-size: 12px; color: var(--text-dim); }
 
 .dc-dark {
-  font-size: 12.5px;
+  font-size: 13px;
   line-height: 1.45;
   color: var(--cyan);
   margin: var(--s3) 0 0;
 }
 
+/* The walk between two classes: the primary action of this card. Same silhouette
+   as the hero button so "the filled terracotta one" means the same thing twice. */
 .dc-route-btn {
   display: block;
   width: 100%;
-  min-height: var(--tap);
+  min-height: 52px;
   margin-top: var(--s4);
   padding: 0 var(--s4);
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--gold);
-  border: 1px solid var(--gold-dim);
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--void);
+  background: color-mix(in srgb, var(--gold) 90%, var(--text));
+  border: none;
   border-radius: var(--radius-sm);
-  background: rgba(255, 182, 39, .06);
-  transition: background var(--dur-fast) var(--ease);
+  transition: background var(--dur-fast) var(--ease), transform var(--dur-fast) var(--ease);
 }
-.dc-route-btn:active { background: rgba(255, 182, 39, .16); }
+.dc-route-btn:active {
+  background: color-mix(in srgb, var(--gold) 72%, var(--text));
+  transform: translateY(1px);
+}
+
+/* Nothing to report yet: an empty line under two buttons looks like a bug. */
+.dc-route-summary:empty { display: none; }
 
 .dc-route-summary {
-  font-size: 12px;
+  font-size: 13px;
   color: var(--text-dim);
   text-align: center;
-  margin: var(--s2) 0 0;
+  margin: var(--s3) 0 0;
+}
+
+.dc-meta {
+  display: grid;
+  gap: var(--s2);
+  margin: var(--s5) 0 0;
+  padding-top: var(--s4);
+  border-top: 1px solid var(--hairline);
+}
+
+.dc-meta-row {
+  display: grid;
+  grid-template-columns: 92px 1fr;
+  gap: var(--s3);
+  align-items: baseline;
+}
+
+.dc-term {
+  font-size: 12.5px;
+  color: var(--text-dim);
+  margin: 0;
+}
+
+.dc-value {
+  font-size: 13px;
+  margin: 0;
+  color: var(--text);
 }
 
 /* ---------- shared ---------------------------------------- */
@@ -476,7 +600,7 @@
     border-top: none;
     border-right: 1px solid var(--glass-border);
     border-radius: 0;
-    box-shadow: 18px 0 48px rgba(0, 0, 0, .45);
+    box-shadow: 12px 0 32px color-mix(in srgb, var(--text) 10%, transparent);
     transform: none;              /* the detent translation is mobile-only */
   }
 
@@ -492,8 +616,8 @@
     padding-bottom: var(--s6);
   }
 
-  .nn-code { font-size: 32px; }
-  .nn-count-num { font-size: 34px; }
+  .nn-count-num { font-size: 40px; }
+  .nn-place-name { font-size: 23px; }
 }
 
 /* Guided tour takes over the screen: chrome steps aside. */

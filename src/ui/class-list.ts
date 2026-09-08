@@ -1,13 +1,16 @@
 /**
- * The five classes.
+ * The five classes — "My classes".
+ *
+ * Only reachable once the sheet is pulled up: at the peek detent the student sees one
+ * answer and one button, and nothing else (docs/REDESIGN.md §2.3).
  *
  * One row per course — five in total, which is what the E2E suite counts — grouped
  * under the weekday the course first meets and ordered by start time inside each
  * group. Each row is a single 56 px-tall button, comfortably over the 44 px minimum,
  * because on a phone the whole row is the target and nothing here is hover-only.
  *
- * The gold left rule is the one place gold appears in the sheet: it ties a row to its
- * building on the map (SPEC §4 — gold is reserved for the student's own buildings).
+ * The terracotta left rule ties a row to its building on the map (SPEC §4 — that
+ * accent is reserved for the student's own buildings and for primary buttons).
  *
  * Any session that lets out after sunset carries a moon beside its time (SPEC §5.9);
  * that flag is date-dependent, so it re-renders as the term moves toward November.
@@ -20,7 +23,7 @@ import { endsAfterDark } from '../core/sun'
 import { DAYS } from '../core/time'
 import type { Session } from '../core/week'
 import { COURSES, type Course, type Day } from '../data/schedule'
-import { WEEK, dayList, shortBuilding, timeRange } from './now-next'
+import { WEEK, dayList, friendlyBuilding, roomLabel, timeRange } from './now-next'
 
 const FULL_DAY: Record<Day, string> = {
   Mon: 'MONDAY',
@@ -82,7 +85,7 @@ interface Row {
 export function createClassList(deps: ClassListDeps): ClassListView {
   const root = el('section', 'cl')
 
-  const heading = el('h2', 'cl-heading', 'Your five')
+  const heading = el('h2', 'cl-heading', 'My classes')
   root.append(heading)
 
   const rows: Row[] = []
@@ -113,12 +116,23 @@ export function createClassList(deps: ClassListDeps): ClassListView {
       const rule = el('span', 'cl-rule')
       rule.setAttribute('aria-hidden', 'true')
 
+      // Building name first among the small print: it is the only part of a row the
+      // student can act on. The course code identifies the row; the title is the
+      // quietest thing on it.
       const main = el('span', 'cl-main')
-      main.append(el('span', 'cl-code', course.code), el('span', 'cl-title', course.title))
+      main.append(
+        el('span', 'cl-code', course.code),
+        el('span', 'cl-where', friendlyBuilding(course.building)),
+        el('span', 'cl-title', course.title),
+      )
 
       const time = el('span', 'cl-time mono')
       const meta = el('span', 'cl-meta')
-      meta.append(time, el('span', 'cl-room mono', `${shortBuilding(course.building)} ${course.room}`))
+      meta.append(
+        el('span', 'cl-days mono', dayList(course.days)),
+        time,
+        el('span', 'cl-room mono', roomLabel(course.room)),
+      )
 
       button.append(rule, main, meta)
       button.addEventListener('click', () => {
@@ -138,8 +152,7 @@ export function createClassList(deps: ClassListDeps): ClassListView {
     for (const row of rows) {
       const { course } = row.session
       const dark = endsAfterDark(row.session, state.now)
-      const days = dayList(course.days)
-      const text = `${days} · ${timeRange(course.start, course.end)}${dark ? ' 🌙' : ''}`
+      const text = `${timeRange(course.start, course.end)}${dark ? ' 🌙' : ''}`
       if (row.time.textContent !== text) row.time.textContent = text
       row.time.dataset['dark'] = dark ? 'true' : 'false'
 

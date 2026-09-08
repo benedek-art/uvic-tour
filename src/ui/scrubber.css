@@ -2,10 +2,16 @@
    Week scrubber — all CSS for src/ui/scrubber.ts lives here.
 
    Design tokens are the single source of truth (src/tokens.css). Never a raw hex
-   below; every colour is a custom property.
+   below; every colour is a custom property. Warm Paper: soft DOWNWARD shadows and
+   hairlines only — there is not one `0 0 Npx` glow in this file, and there must not be.
 
-   MOBILE FIRST. Authored at 390x844: five day pills over ONE timeline row for the
-   selected day. The stacked Mon-Fri grid is the >=900px enhancement.
+   MOBILE FIRST. Authored at 390x844.
+
+   TWO STATES, and the resting one is nearly nothing:
+     collapsed  ... one 44px "My week" button, floated above the sheet. The container
+                    is transparent to pointers so the map keeps the rest of the band.
+     .is-open   ... the button plus the panel: five day pills over ONE timeline row for
+                    the selected day. The stacked Mon-Fri grid is the >=900px enhancement.
    ============================================================ */
 
 /* Track geometry, shared by the playhead, blocks and markers so they can never
@@ -24,17 +30,91 @@
 
   display: flex;
   flex-direction: column;
+  align-items: flex-start;   /* collapsed, the button is only as wide as its words */
   gap: var(--s2);
 
   margin: 0 calc(var(--safe-l) + var(--s3)) 0 calc(var(--safe-r) + var(--s3));
-  padding: var(--s3);
 
+  /* The container spans the screen so the panel can, but it must never be a full-width
+     tap-blocker over the map. Same contract as #topbar: shell is transparent to
+     pointers, controls are not. */
+  pointer-events: none;
+}
+
+.scrub > * { pointer-events: auto; }
+
+.scrub.is-open { align-items: stretch; }
+
+/* ---------- the disclosure button ---------- */
+
+.scrub__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s2);
+  align-self: flex-start;    /* stays a pill even when .is-open stretches its sibling */
+
+  min-height: var(--tap);
+  padding: 0 var(--s4);
+
+  border: 1px solid var(--glass-border);
+  border-radius: 999px;
+  background: var(--glass);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+
+  color: var(--text);
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.scrub__toggle:active { background: var(--void); }
+
+.scrub__toggle:focus-visible {
+  outline: 2px solid var(--cyan);
+  outline-offset: 2px;
+}
+
+/* A chevron in two borders — no icon font, no SVG asset. Points up to open. */
+.scrub__chev {
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  margin-top: 3px;
+  border-right: 2px solid var(--text-dim);
+  border-top: 2px solid var(--text-dim);
+  transform: rotate(-45deg);
+  transition: transform var(--dur) var(--ease);
+}
+
+.scrub.is-open .scrub__chev {
+  margin-top: -3px;
+  transform: rotate(135deg);
+}
+
+/* ---------- the panel ---------- */
+
+.scrub__panel {
+  /* Closed, the `hidden` attribute does the hiding; this is the open layout only. */
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+  width: 100%;
+
+  padding: var(--s4);
   background: var(--glass);
   border: 1px solid var(--glass-border);
   border-radius: var(--radius);
+  box-shadow: var(--shadow);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
 }
+
+/* An author `display` outranks the UA stylesheet's `[hidden] { display: none }`, so the
+   collapsed state has to be spelled out here or the panel would never actually close. */
+.scrub__panel[hidden] { display: none; }
 
 /* ---------- head: readout + back to now ---------- */
 
@@ -151,7 +231,8 @@
 }
 
 .scrub__track:focus-visible {
-  box-shadow: 0 0 0 2px var(--cyan);
+  outline: 2px solid var(--cyan);
+  outline-offset: 2px;
 }
 
 .scrub__tick {
@@ -179,10 +260,11 @@
   transition: background var(--dur-fast) var(--ease), box-shadow var(--dur-fast) var(--ease);
 }
 
+/* Lit = filled terracotta. No glow: on paper a `0 0 Npx` halo reads as a printing smudge,
+   and a solid fill against --path is already the strongest contrast on the track. */
 .scrub__block.is-lit {
   background: var(--gold);
   border-color: var(--gold);
-  box-shadow: 0 0 12px color-mix(in srgb, var(--gold) 55%, transparent);
 }
 
 /* Blocks are ~30px wide on a phone — far too narrow for a course code. The caption
@@ -219,7 +301,6 @@
   margin-left: -1px;
   background: var(--text);
   border-radius: 1px;
-  box-shadow: 0 0 8px color-mix(in srgb, var(--text) 45%, transparent);
   pointer-events: none;
 }
 
@@ -326,10 +407,7 @@
   .scrub__block {
     transition: none;
   }
-  .scrub__block.is-lit,
-  .scrub__playhead {
-    box-shadow: none;
-  }
+  .scrub__chev { transition: none; }
 }
 
 /* Sheet expanded over the scrubber: get out of the way. */

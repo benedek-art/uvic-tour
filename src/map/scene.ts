@@ -1,6 +1,10 @@
 /**
  * The map scene: creates the MapLibre map, frames the campus, and plays the load
- * animation — buildings rising out of darkness in a ripple from the campus centre.
+ * animation — buildings rising off the ground plane in a ripple from the campus centre.
+ *
+ * This module owns the *camera and the clock*. Every colour and every lighting number in
+ * the scene lives in `./style.ts` (see the light-rig block at the top of that file); there
+ * are deliberately none here, so a theme change never has to touch the animation.
  *
  * Nothing in here touches the network. The two GeoJSON files are bundled at build time
  * (see the `geojson-as-json` plugin in `vite.config.ts`).
@@ -49,11 +53,19 @@ setWorkerUrl(maplibreWorkerUrl as string)
 
 // --- camera constants --------------------------------------------------------------------
 
-/** SPEC §4: an illuminated model seen from a low oblique angle, not a top-down map. */
+/**
+ * A low oblique angle, not a top-down map.
+ *
+ * The pitch matters more on the light theme than it did on the dark one. Roof-to-ground
+ * contrast is only a few L* here by design (docs/REDESIGN.md wants calm), while wall-to-
+ * ground contrast is large — so the walls are what make the campus read as a model, and the
+ * pitch is what puts walls on screen. Flattening this toward 0 would trade the model back
+ * for a beige plan view.
+ */
 export const INITIAL_PITCH = 50
 export const INITIAL_BEARING = -18
 
-/** Duration of the building rise, in ms (SPEC §4 motion table). */
+/** Duration of the building rise, in ms (SPEC §4 motion table — motion survives the retheme). */
 export const RISE_MS = 1400
 
 /** How far the camera pulls back / flattens before easing into the framed pose. */
@@ -259,8 +271,8 @@ export function setHeroBuildings(map: MapLibreMap, names: string[]): void {
 }
 
 /**
- * The hero moment: buildings rise out of the dark in a ripple from the campus centre while
- * the camera settles into its framed pose and the footpaths fade up underneath.
+ * The hero moment: buildings rise out of the ground plane in a ripple from the campus
+ * centre while the camera settles into its framed pose and the footpaths fade up underneath.
  *
  * Resolves when the rise is finished. Safe to call more than once — subsequent calls
  * resolve immediately rather than restarting.
@@ -298,7 +310,7 @@ export function playRiseAnimation(map: MapLibreMap): Promise<void> {
     const frame = (now: number) => {
       const p = Math.min(1, (now - start) / RISE_MS)
       applyRise(map, easeOutCubic(p))
-      // Paths come up first and fast, so the buildings rise out of a lit ground plan.
+      // Paths come up first and fast, so the buildings rise out of a drawn ground plan.
       setLineOpacity(map, LAYER_PATHS, PATH_OPACITY * Math.max(0, Math.min(1, p / 0.4)))
       if (p < 1) {
         requestAnimationFrame(frame)

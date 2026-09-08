@@ -1,33 +1,44 @@
 /**
- * Cinematic tour mode — the "show your friend around campus" feature (SPEC §5.8).
+ * Guided tour mode — the "show your friend around campus" feature (SPEC §5.8).
  *
- * Press play and the camera flies a scripted, narrated loop: you arrive at the bus
- * exchange like everyone does, land on your 8:30 Monday lecture hall, sweep through the
- * three buildings that hold your five classes, then the gym, the library and the food,
- * and finish on a slow orbit over Ring Road. Eight stops, ~4 s each. It is meant to feel
- * like a title sequence, not a slideshow.
+ * Press play and the camera walks a scripted, narrated route: it starts on your own
+ * residence ("this is you"), moves out through the three buildings that hold your five
+ * classes, then the library, the food and the gym, and finishes on a slow orbit over
+ * Ring Road. Eight stops, ~4 s each, and it advances by itself so a passive viewer
+ * never has to do anything.
  *
- * THREE THINGS THIS MODULE REFUSES TO GET WRONG
+ * FOUR THINGS THIS MODULE REFUSES TO GET WRONG
  *
- *  1. **It never strands you.** Every flight is chained on the map's `moveend`, but
+ *  1. **A tap means NEXT, never EXIT.** This module used to mount a full-bleed scrim
+ *     that cancelled the tour on any tap — so the one gesture everybody makes while
+ *     watching a slideshow destroyed the thing they had just started. Now the scrim
+ *     advances. Leaving needs the big labelled "Done" button, or Escape. Nothing else
+ *     ends the tour early. (REDESIGN §3.)
+ *  2. **It opens somewhere you recognise.** Stop 1 is the student's own residence,
+ *     resolved from the OSM polygon. The old stop 1 was the bus loop, whose coordinate
+ *     `src/data/pois.ts` labels DERIVED — an unlabelled patch of road that reads as
+ *     "a random place". Every stop below now resolves from a surveyed or RESOLVED
+ *     coordinate; nothing ESTIMATED is in the script.
+ *  3. **It never strands you.** Every flight is chained on the map's `moveend`, but
  *     `moveend` is not a promise — an interrupted or degenerate camera move can simply
  *     never emit one. Each leg therefore also carries a deadman timer that advances the
  *     tour regardless. A tour that hangs is worse than no tour at all.
- *  2. **Cancelling actually cancels.** Escape, a tap anywhere on the map, and the Stop
- *     button all run through one `stopTour()`. A run token (`Run`) is flipped and every
- *     pending timer, listener and awaited promise is woken and discarded, so a stop
- *     mid-flight can't leave a zombie timer firing into a torn-down overlay.
- *  3. **Reduced motion is honoured.** With `prefers-reduced-motion: reduce` the camera
- *     jumps instead of flying, holds are shortened, and the closing orbit is skipped
- *     entirely — nobody gets trapped inside a two-minute animation.
+ *  4. **Cancelling actually cancels.** Escape and the Done button both run through one
+ *     `stopTour()`. A run token (`Run`) is flipped and every pending timer, listener and
+ *     awaited promise is woken and discarded, so a stop mid-flight can't leave a zombie
+ *     timer firing into a torn-down overlay.
+ *
+ * Reduced motion is honoured: the camera jumps instead of flying, holds are shortened,
+ * and the closing orbit is skipped entirely.
  *
  * FILE BOUNDARIES. This module exports functions and owns exactly two pieces of DOM: the
  * launch button it appends to whatever root the orchestrator hands it, and the contents
  * of the existing `<div id="tour-overlay">`. It never touches the sheet, the scrubber or
  * the store — the orchestrator does that from `onStart` / `onEnd`.
  *
- * Colour note: `--gold` is reserved for the student's own class buildings (SPEC §4).
- * Every piece of tour chrome below is `--cyan` or a neutral token.
+ * Colour note (REDESIGN §1): `--gold` (terracotta) is reserved for the student's own
+ * buildings and for PRIMARY buttons. The one primary button here is "Next stop"; every
+ * other piece of tour chrome is `--cyan` (sage) or a neutral paper/ink token.
  */
 
 // Vite's ambient types declare `*.css` so the side-effect import below typechecks
@@ -39,6 +50,7 @@ import type { Map as MapLibreMap } from 'maplibre-gl'
 
 import { CAMPUS_TARGET, buildingTarget, orbit } from '../map/camera'
 import { POIS } from '../data/pois'
+import { HOME_BUILDING } from '../data/home'
 import './tour.css'
 
 /** One beat of the tour: where the camera goes, and what the card says while it's there. */
@@ -76,6 +88,9 @@ const FLY = { curve: 1.42, speed: 0.62, essential: true } as const
  * Resolve a POI's pose. Centre comes from the baked POI record; the framing is authored
  * per stop so the tour doesn't repeat the same three-quarter angle eight times running.
  *
+ * Only POIs that `src/data/pois.ts` marks RESOLVED (a real OSM polygon centroid) are used
+ * in the script — the DERIVED bus loop and every ESTIMATED pin are deliberately absent.
+ *
  * The literal is a labelled fallback, not a duplicate source of truth — it only applies
  * if the id ever disappears from `src/data/pois.ts`, and every value is inside the campus
  * bbox so a missing POI still produces a sane camera rather than a flight to null island.
@@ -109,60 +124,72 @@ function buildingPose(
 }
 
 /**
- * Eight beats, and the order is the whole point: it is the shape of an actual first day.
- * Arrive → first class → the building you'll live in → the odd one out → gym → library →
- * food → and a look at the whole thing from above.
+ * Eight beats, and the order is the whole point: it starts where the student wakes up
+ * and works outward.
+ *
+ * Home → first class → the building with three of your classes → the odd one out →
+ * the library → the food → the gym → and a look at the whole thing from above.
+ *
+ * Stop 1 used to be the bus exchange. It is a stretch of unlabelled service road whose
+ * coordinate is DERIVED rather than surveyed, so the tour opened on what looked like
+ * nowhere. Opening on the building you sleep in is instantly recognisable, and it makes
+ * every stop after it read as a distance from home.
  */
 export const TOUR_STOPS: TourStop[] = [
   {
-    title: 'You arrive here',
-    body: 'Almost everyone starts at this loop. Step off the bus, walk two minutes south, and campus opens up around you.',
-    target: poiPose('bus-loop', [-123.30865, 48.46609], 16.9, 52, 24),
+    title: 'This is you',
+    body: 'Your room is in here — Roderick Haig-Brown. Every walk in this app starts at this door.',
+    target: buildingPose(HOME_BUILDING, [-123.306375, 48.462404], 17.6, 55, 20),
     holdMs: HOLD_MS,
   },
   {
-    title: 'Bob Wright Centre',
-    body: 'Your very first class. 8:30 Monday morning, BIOL 184, room B150. Maybe set two alarms for that one.',
+    title: 'Your first class',
+    body: 'Bob Wright Centre. Biology at 8:30 on Monday, room B150. Maybe set two alarms.',
     target: buildingPose('Bob Wright Centre', [-123.30903, 48.46214], 17.5, 55, -30),
     holdMs: HOLD_MS,
   },
   {
-    title: 'MacLaurin Building',
-    body: 'Three of your five classes live here — Italian in D287, and both Psych sections in the very same room.',
+    title: 'Three of your classes',
+    body: 'MacLaurin Building. Italian and both Psych sections — the two Psych ones share a room.',
     target: buildingPose('MacLaurin Building', [-123.31386, 48.4628], 17.5, 55, 12),
     holdMs: HOLD_MS,
   },
   {
-    title: 'Engineering / Computer Science',
-    body: 'BIOL 150A hides in room 123, Tuesday, Wednesday and Friday afternoons. Biology, in the engineering building. Welcome to UVic.',
+    title: 'The odd one out',
+    body: 'Biology in the engineering building, room 123. Tuesday, Wednesday and Friday afternoons.',
     target: buildingPose('Engineering/Computer Science Building', [-123.31144, 48.46103], 17.4, 55, -46),
     holdMs: HOLD_MS,
   },
   {
-    title: 'CARSA',
-    body: 'The gym, already paid for by your tuition. Weights, courts, a climbing wall — and Mondays leave you a six-hour gap.',
-    target: poiPose('carsa', [-123.31119, 48.4679], 17.2, 58, 40),
-    holdMs: HOLD_MS,
-  },
-  {
-    title: 'McPherson Library',
-    body: 'Five floors, and the higher you climb the quieter it gets. Coffee is downstairs, so you never give up your table.',
+    title: 'The library',
+    body: 'McPherson Library. Five floors, and the higher you go the quieter it gets.',
     target: poiPose('mcpherson-library', [-123.30935, 48.46342], 17.3, 54, -8),
     holdMs: HOLD_MS,
   },
   {
-    title: 'The SUB',
-    body: 'Food court, pub, and every club on campus. This is where an hour between classes quietly turns into three.',
+    title: 'Food and people',
+    body: 'The SUB. Food court, pub and every club on campus. Lunch happens here.',
     target: poiPose('student-union', [-123.30819, 48.46508], 17.2, 56, 62),
     holdMs: HOLD_MS,
   },
   {
-    title: "That's the loop",
-    body: 'Ring Road holds all of it — five classes, one gym, and a famous number of rabbits. See you in September.',
+    title: 'The gym',
+    body: 'CARSA, already paid for by your tuition. Weights, courts and a climbing wall.',
+    target: poiPose('carsa', [-123.31119, 48.4679], 17.2, 58, 40),
+    holdMs: HOLD_MS,
+  },
+  {
+    title: "That's your campus",
+    body: 'Ring Road holds all of it — five classes, one gym, and a lot of rabbits.',
     target: { center: [CAMPUS_TARGET.center[0], CAMPUS_TARGET.center[1]], zoom: 15.2, pitch: 58, bearing: -18 },
     holdMs: HOLD_MS,
   },
 ]
+
+/** Plain language, not a fraction. "3 / 8" is a ratio; "Stop 3 of 8" is a sentence. */
+function progressLabel(index: number): string {
+  return `Stop ${index + 1} of ${TOUR_STOPS.length}`
+}
 
 /* ------------------------------------------------------------------ *
  * Launch button
@@ -203,13 +230,24 @@ export function mountTourButton(root: HTMLElement, onStart: () => void): void {
  * ------------------------------------------------------------------ */
 
 /**
- * One playthrough. `cancelled` is the token every await checks; `wake` holds the resolve
- * functions of everything currently being awaited so cancelling can unblock them all at
- * once instead of waiting out a 4-second hold.
+ * One playthrough.
+ *
+ * `cancelled` is the token every await checks; `wake` holds the resolve functions of
+ * everything currently being awaited, so both cancelling *and* skipping ahead can unblock
+ * them at once instead of waiting out a 4-second hold.
+ *
+ * `index` is the cursor the loop reads at the top of every beat. `nextStop()` bumps it and
+ * wakes the sleepers; the loop notices the cursor moved under it and restarts on the new
+ * stop. That is the whole "tap to skip ahead" mechanism — no second timer, no second
+ * source of truth for which stop is showing.
  */
 interface Run {
   cancelled: boolean
   ended: boolean
+  index: number
+  /** The index currently painted, so a tap and the loop can't render the same beat twice. */
+  rendered: number
+  chrome: Chrome | null
   wake: Set<() => void>
   detach: Array<() => void>
   onEnd: () => void
@@ -225,6 +263,26 @@ function prefersReducedMotion(): boolean {
   } catch {
     return false
   }
+}
+
+/**
+ * Paint one beat, at most once.
+ *
+ * Both the loop and a tap call this. A tap paints IMMEDIATELY rather than waiting for the
+ * loop to wake up a microtask later — REDESIGN §2.5, "every tap does something visible" —
+ * and the loop then finds the beat already on screen and leaves it alone.
+ */
+function show(run: Run, index: number): void {
+  const stop = TOUR_STOPS[index]
+  if (!run.chrome || !stop || run.rendered === index) return
+  run.rendered = index
+  renderStop(run.chrome, stop, index)
+}
+
+/** Wake everything currently being awaited, without cancelling the run. */
+function wakeAll(run: Run): void {
+  // Copy first: each waker deletes itself from the set as it resolves.
+  for (const wake of [...run.wake]) wake()
 }
 
 /** A cancellable pause. Registers its own resolver so `stopTour()` can cut it short. */
@@ -285,8 +343,8 @@ function cancellableOrbit(map: MapLibreMap, run: Run, ms: number): Promise<void>
   return orbit(facade, ms)
 }
 
-/** Resolves as soon as the run is cancelled — used to stop awaiting a long animation. */
-function cancellation(run: Run): Promise<void> {
+/** Resolves as soon as the run is cancelled or skipped — stops awaiting a long animation. */
+function interruption(run: Run): Promise<void> {
   return new Promise<void>((resolve) => {
     const finish = (): void => {
       run.wake.delete(finish)
@@ -301,32 +359,54 @@ function cancellation(run: Run): Promise<void> {
  * ------------------------------------------------------------------ */
 
 interface Chrome {
-  count: HTMLElement
+  progress: HTMLElement
   ticks: HTMLElement[]
   title: HTMLElement
   body: HTMLElement
   card: HTMLElement
+  next: HTMLElement
+  overlay: HTMLElement
 }
 
-/** Build the narration card inside the existing `#tour-overlay` and reveal it. */
-function buildOverlay(overlay: HTMLElement, onStop: () => void): Chrome {
+/**
+ * Build the narration card inside the existing `#tour-overlay` and reveal it.
+ *
+ * Two handlers, and the difference between them is the entire bug fix:
+ *   `onNext` — the full-bleed surface, and the big primary button. Tap = next stop.
+ *   `onDone` — the one labelled control that leaves. Nothing else exits.
+ */
+function buildOverlay(overlay: HTMLElement, onNext: () => void, onDone: () => void): Chrome {
   overlay.replaceChildren()
   overlay.classList.add('tour')
 
-  // Full-bleed and pointer-catching: this *is* the "tap the map to exit" surface, and it
-  // also stops a stray drag from fighting the camera mid-flight.
-  const scrim = document.createElement('div')
+  // Full-bleed and pointer-catching. It used to cancel the tour; now it ADVANCES it,
+  // which is what everyone was already trying to do. It also stops a stray drag from
+  // fighting the camera mid-flight.
+  const scrim = document.createElement('button')
+  scrim.type = 'button'
   scrim.className = 'tour__scrim'
-  scrim.addEventListener('click', onStop)
+  scrim.setAttribute('data-testid', 'tour-scrim')
+  scrim.setAttribute('aria-label', 'Next stop')
+  scrim.addEventListener('click', onNext)
 
-  const stop = document.createElement('button')
-  stop.type = 'button'
-  stop.className = 'tour__stop'
-  stop.setAttribute('data-testid', 'tour-stop')
-  stop.textContent = 'Stop tour'
-  stop.addEventListener('click', (event) => {
+  const done = document.createElement('button')
+  done.type = 'button'
+  done.className = 'tour__done'
+  done.setAttribute('data-testid', 'tour-stop')
+  done.setAttribute('aria-label', 'Close the tour')
+
+  const doneMark = document.createElement('span')
+  doneMark.className = 'tour__done-mark'
+  doneMark.setAttribute('aria-hidden', 'true')
+  doneMark.textContent = '✕'
+
+  const doneLabel = document.createElement('span')
+  doneLabel.textContent = 'Done'
+
+  done.append(doneMark, doneLabel)
+  done.addEventListener('click', (event) => {
     event.stopPropagation()
-    onStop()
+    onDone()
   })
 
   const card = document.createElement('div')
@@ -337,8 +417,9 @@ function buildOverlay(overlay: HTMLElement, onStop: () => void): Chrome {
   const meta = document.createElement('div')
   meta.className = 'tour__meta'
 
-  const count = document.createElement('span')
-  count.className = 'tour__count mono'
+  const progress = document.createElement('span')
+  progress.className = 'tour__progress'
+  progress.setAttribute('data-testid', 'tour-progress')
 
   const tickRow = document.createElement('span')
   tickRow.className = 'tour__ticks'
@@ -356,19 +437,34 @@ function buildOverlay(overlay: HTMLElement, onStop: () => void): Chrome {
   const body = document.createElement('p')
   body.className = 'tour__body'
 
-  meta.append(count, tickRow)
-  card.append(meta, title, body)
-  overlay.append(scrim, stop, card)
+  // The primary action, and the only place --gold appears in tour chrome (REDESIGN §2.1).
+  const next = document.createElement('button')
+  next.type = 'button'
+  next.className = 'tour__next'
+  next.setAttribute('data-testid', 'tour-next')
+  next.addEventListener('click', (event) => {
+    event.stopPropagation()
+    onNext()
+  })
+
+  const hint = document.createElement('p')
+  hint.className = 'tour__hint'
+  hint.textContent = 'Or tap anywhere on the map'
+
+  meta.append(progress, tickRow)
+  card.append(meta, title, body, next, hint)
+  overlay.append(scrim, done, card)
   overlay.hidden = false
   overlay.classList.add('is-playing')
 
-  return { count, ticks, title, body, card }
+  return { progress, ticks, title, body, card, next, overlay }
 }
 
 /** Put the app back exactly as we found it. Safe to call twice. */
 function teardownOverlay(overlay: HTMLElement): void {
   overlay.replaceChildren()
   overlay.classList.remove('tour', 'is-playing')
+  overlay.removeAttribute('data-stop')
   overlay.hidden = true
 }
 
@@ -379,9 +475,13 @@ function renderStop(chrome: Chrome, stop: TourStop, index: number): void {
   // than being coalesced into a no-op by the browser.
   void chrome.card.offsetWidth
 
-  chrome.count.textContent = `${index + 1} / ${TOUR_STOPS.length}`
+  // 1-based, and readable by a test without parsing prose.
+  chrome.overlay.dataset.stop = String(index + 1)
+
+  chrome.progress.textContent = progressLabel(index)
   chrome.title.textContent = stop.title
   chrome.body.textContent = stop.body
+  chrome.next.textContent = index === TOUR_STOPS.length - 1 ? 'Finish' : 'Next stop'
   for (const [i, tick] of chrome.ticks.entries()) {
     tick.classList.toggle('is-done', i <= index)
   }
@@ -395,7 +495,7 @@ function renderStop(chrome: Chrome, stop: TourStop, index: number): void {
 
 /**
  * Play the tour. `onEnd` fires exactly once — whether the loop finished on its own or the
- * user bailed out — so the orchestrator can restore the sheet and scrubber in one place.
+ * user pressed Done — so the orchestrator can restore the sheet and scrubber in one place.
  *
  * Starting while a tour is already running restarts cleanly: the previous run is stopped
  * (and its `onEnd` fired) first.
@@ -403,10 +503,20 @@ function renderStop(chrome: Chrome, stop: TourStop, index: number): void {
 export function startTour(map: MapLibreMap, overlay: HTMLElement, onEnd: () => void): void {
   stopTour()
 
-  const run: Run = { cancelled: false, ended: false, wake: new Set(), detach: [], onEnd }
+  const run: Run = {
+    cancelled: false,
+    ended: false,
+    index: 0,
+    rendered: -1,
+    chrome: null,
+    wake: new Set(),
+    detach: [],
+    onEnd,
+  }
   current = run
 
-  const chrome = buildOverlay(overlay, stopTour)
+  const chrome = buildOverlay(overlay, nextStop, stopTour)
+  run.chrome = chrome
   run.detach.push(() => teardownOverlay(overlay))
 
   const onKey = (event: KeyboardEvent): void => {
@@ -415,14 +525,30 @@ export function startTour(map: MapLibreMap, overlay: HTMLElement, onEnd: () => v
   document.addEventListener('keydown', onKey)
   run.detach.push(() => document.removeEventListener('keydown', onKey))
 
-  // Belt and braces: the scrim already swallows taps, but if anything else manages to
-  // grab the camera the tour should get out of the way rather than fight it. `dragstart`
-  // is user-driven only — `flyTo` never emits it, so this cannot self-cancel.
-  const onDrag = (): void => { stopTour() }
-  map.on('dragstart', onDrag)
-  run.detach.push(() => { map.off('dragstart', onDrag) })
+  // NOTE: no `dragstart` cancel. The map is behind a full-bleed surface so a drag cannot
+  // reach it anyway, and "the camera moved, so throw the user out" is exactly the kind of
+  // surprise exit this rewrite removes.
 
-  void play(map, run, chrome)
+  void play(map, run)
+}
+
+/**
+ * Skip to the next stop immediately. This is what a tap does — on the scrim, on the card,
+ * on the big button. On the final stop there is nowhere further to go, so it finishes the
+ * tour; the button is labelled "Finish" there, so nothing about that is a surprise.
+ */
+function nextStop(): void {
+  const run = current
+  if (!run || run.cancelled) return
+
+  if (run.index >= TOUR_STOPS.length - 1) {
+    stopTour()
+    return
+  }
+
+  run.index += 1
+  show(run, run.index)
+  wakeAll(run)
 }
 
 /**
@@ -435,8 +561,7 @@ export function stopTour(): void {
   current = null
   run.cancelled = true
 
-  // Copy first: each waker deletes itself from the set as it resolves.
-  for (const wake of [...run.wake]) wake()
+  wakeAll(run)
   run.wake.clear()
 
   for (const detach of run.detach) detach()
@@ -448,27 +573,44 @@ export function stopTour(): void {
   }
 }
 
-/** The sequence itself. Every await is followed by a cancellation check. */
-async function play(map: MapLibreMap, run: Run, chrome: Chrome): Promise<void> {
+/**
+ * The sequence itself.
+ *
+ * A `while` over `run.index` rather than a `for` over the array, because the cursor can
+ * move under us at any await: `nextStop()` bumps it and wakes whatever we are waiting on,
+ * and the `run.index !== index` checks below restart the beat on the new stop instead of
+ * finishing the old one. Every await is also followed by a cancellation check.
+ */
+async function play(map: MapLibreMap, run: Run): Promise<void> {
   const reduced = prefersReducedMotion()
   const hold = reduced ? REDUCED_HOLD_MS : HOLD_MS
 
-  for (const [index, stop] of TOUR_STOPS.entries()) {
-    if (run.cancelled) return
+  while (!run.cancelled) {
+    const index = run.index
+    const stop = TOUR_STOPS[index]
+    if (!stop) break
 
-    renderStop(chrome, stop, index)
+    show(run, index)
 
     await flyAndSettle(map, run, stop.target, reduced)
     if (run.cancelled) return
+    if (run.index !== index) continue
 
     await sleep(run, Math.min(stop.holdMs, hold))
     if (run.cancelled) return
+    if (run.index !== index) continue
 
     // The finale: a full turn over Ring Road with the last card still up.
-    if (index === TOUR_STOPS.length - 1 && !reduced) {
-      await Promise.race([cancellableOrbit(map, run, ORBIT_MS), cancellation(run)])
-      if (run.cancelled) return
+    if (index === TOUR_STOPS.length - 1) {
+      if (!reduced) {
+        await Promise.race([cancellableOrbit(map, run, ORBIT_MS), interruption(run)])
+        if (run.cancelled) return
+        if (run.index !== index) continue
+      }
+      break
     }
+
+    run.index = index + 1
   }
 
   stopTour()

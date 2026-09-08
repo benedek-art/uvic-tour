@@ -21,6 +21,20 @@
  * follows the finger immediately rather than waiting for a store round-trip. As soon
  * as the store reports a different scrub value, the store wins and `pending` is
  * dropped, so the two can never drift apart.
+ *
+ * COLLAPSED BY DEFAULT (docs/REDESIGN.md §2, rule 3).
+ * Dragging through a week is a *second* question. The first one is "where is my next
+ * class?", and the sheet answers that on its own. So the resting state of `#scrubber` is
+ * a single quiet button — **My week** — and the timeline only exists once you ask for it.
+ * The whole tree is still built and mounted at load; only CSS (`.scrub.is-open`) decides
+ * whether the panel is on screen, which keeps every measurement, test selector and store
+ * subscription exactly where it was.
+ *
+ * `#scrubber` therefore stays the mounted element and stays measurable: collapsed, its box
+ * is the button, so `main.ts`'s `getBoundingClientRect()` reads a *smaller* bottom chrome
+ * and the map simply gets more room. When collapsed the container is `pointer-events:none`
+ * (its children are not), so map gestures pass through the empty band beside the button —
+ * the same trick `#topbar` uses.
  */
 
 // Vite's ambient types declare `*.css` so the side-effect import below typechecks
@@ -70,6 +84,13 @@ const PILL_LABEL: Record<Day, string> = {
 
 /** Hour gridlines drawn under every track, so blocks read against a scale. */
 const TICK_HOURS = [8, 10, 12, 14, 16, 18, 20]
+
+/**
+ * Fired on `window` by anything that needs the timeline out of the way — currently the
+ * place card, which floats at the same offset and would otherwise land on top of an open
+ * panel. A DOM event rather than an import so the two components stay decoupled.
+ */
+export const COLLAPSE_EVENT = 'uvic:collapse-week'
 
 /** jsdom (and older engines) have no pointer capture; treat it as optional, never assume it. */
 interface PointerCapturable {
@@ -141,6 +162,11 @@ export function mountScrubber(root: HTMLElement, deps: ScrubberDeps): void {
   root.classList.add('scrub')
   root.replaceChildren()
   root.hidden = false
+
+  // The panel holds everything the timeline is. It is built now and shown only on
+  // request; see the header note on why the resting state is one button.
+  const panel = el('div', 'scrub__panel')
+  panel.id = 'scrub-panel'
 
   // --- head: live/scrubbed readout + "back to now" -------------------------------
   const head = el('div', 'scrub__head')
@@ -240,7 +266,54 @@ export function mountScrubber(root: HTMLElement, deps: ScrubberDeps): void {
   }
 
   const caption = el('p', 'scrub__caption', '')
-  root.append(head, pillbar, body, axis, caption)
+  panel.append(head, pillbar, body, axis, caption)
+
+  // --- the one control that is on screen by default --------------------------------
+  // Plain words, one job, 44px tall. Panel first in the DOM so it opens *upwards*, away
+  // from the sheet, and the button stays where the thumb last found it.
+  const toggle = el('button', 'scrub__toggle')
+  toggle.type = 'button'
+  toggle.setAttribute('data-testid', 'week-toggle')
+  toggle.setAttribute('aria-controls', 'scrub-panel')
+  const toggleLabel = el('span', 'scrub__togglelabel', 'My week')
+  const chevron = el('span', 'scrub__chev')
+  chevron.setAttribute('aria-hidden', 'true')
+  toggle.append(toggleLabel, chevron)
+
+  root.append(panel, toggle)
+
+  /** Show or hide the timeline. Nothing else in the app changes — this is pure disclosure. */
+  function setOpen(open: boolean): void {
+    root.classList.toggle('is-open', open)
+    panel.hidden = !open
+    toggle.setAttribute('aria-expanded', String(open))
+    // The label always describes what the next tap will DO (redesign rule 5).
+    toggleLabel.textContent = open ? 'Hide my week' : 'My week'
+  }
+
+  /**
+   * Close, and put the map back on the live clock.
+   *
+   * Without the second half, a user who scrubbed to Thursday 19:00 and then collapsed the
+   * panel would be left staring at a map lit for a time that nothing on screen mentions,
+   * with the only control that could undo it now hidden. Collapsing means "never mind".
+   */
+  function collapse(): void {
+    if (!root.classList.contains('is-open')) return
+    setOpen(false)
+    const state = deps.store.get()
+    if (state.scrubMinutes !== null || pending?.minutes != null) setScrub(state.scrubDay, null)
+  }
+
+  toggle.addEventListener('click', () => {
+    if (root.classList.contains('is-open')) collapse()
+    else setOpen(true)
+  })
+
+  // Another overlay needs this space: stand down rather than stack.
+  window.addEventListener(COLLAPSE_EVENT, collapse)
+
+  setOpen(false)
 
   // ---------------------------------------------------------------------------------
   // Interaction

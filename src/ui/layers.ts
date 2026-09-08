@@ -1,93 +1,45 @@
 /**
- * The layer toggles (SPEC §4 Layout: top-right, above the map).
+ * Map layer toggles — **deliberately no longer rendered.** (docs/REDESIGN.md §2, rule 3.)
  *
- * Two switches, deliberately: **Tour stops** turns the cyan POI markers on and off, and
- * **Paths** turns the ambient footpath tracery on and off. That's the whole control — a
- * map this art-directed doesn't need a legend, it needs two switches.
+ * WHY THIS IS A NO-OP AND NOT A REDESIGN
+ * --------------------------------------
+ * The control was two glyph-only segments in the top bar: a dot (tour stops) and a dashed
+ * rule (footpaths). On a 390px phone it carried no words at all, so the only way to learn
+ * what either did was to press it and watch the map change — the exact opposite of "a five
+ * year old can use it". Giving them words was the other option, and it fails a cheaper
+ * test first: *both layers default to ON, and nothing in the app ever asks the user to turn
+ * one off.* A control that is correct at its default for essentially every user, forever,
+ * is not a control — it is clutter with a tap target. It also cost the top bar its whole
+ * left pole, which is why the bar could never be just "one obvious thing to press".
  *
- * They render as ONE segmented control, not two chips: on a 390px phone they share the
- * top bar with "Show me campus", and as full-width text chips the three of them wrapped
- * into a ragged two-row bar. As a fused 88px switchboard they read as what they are —
- * secondary utilities — and leave the bar's primary slot to the tour. Each segment keeps
- * a full 44x44 target; the visible glyph is a miniature of the thing it toggles, and the
- * word returns at >=900px. See src/ui/layers.css.
+ * So the top bar now holds exactly one control: the tour button. Both layers stay visible
+ * because `src/main.ts` seeds `store.layers = { pois: true, paths: true }` and never calls
+ * back in here; nothing has to change for the map to look right.
  *
- * This module is presentation only. It reports state through `onToggle` and never touches
- * the map itself; the caller owns `setPOIsVisible` and the map's `paths` layer visibility.
- * That keeps the control testable and keeps map knowledge in `src/map/`.
+ * The export stays — `src/main.ts` imports and calls `mountLayerToggles(topbar, cb)`, and a
+ * no-op is a far smaller change than editing the orchestrator out from under three parallel
+ * agents. `onToggle` is simply never invoked. If the feature is ever wanted back it belongs
+ * in a settings surface with real words ("Show tour stops", "Show footpaths"), not in the
+ * bar above the map.
+ *
+ * NOTE: unlike the previous implementation this does **not** call `root.replaceChildren()`.
+ * That is intentional — `mountTourButton` appends into the same `#topbar`, and clearing it
+ * here would make mount order load-bearing for no reason.
  */
 
 import './layers.css'
 
 export type LayerId = 'pois' | 'paths'
 
-interface ToggleSpec {
-  id: LayerId
-  /** Shown next to the glyph from 900px up, where there is room for words. */
-  label: string
-  /** The accessible name. Always present, at every width — the glyph alone is not a name. */
-  name: string
-  /** Both layers start on: the first thing the app should say is "here's everything". */
-  initial: boolean
-}
-
-const TOGGLES: ToggleSpec[] = [
-  { id: 'pois', label: 'Stops', name: 'Tour stops', initial: true },
-  { id: 'paths', label: 'Paths', name: 'Paths', initial: true },
-]
-
 /**
- * Build the toggle group inside `root` and call `onToggle` whenever one flips.
+ * Mount the layer toggles. Renders nothing; see the note above.
  *
- * Idempotent: `root` is emptied first, so a re-mount replaces the controls rather than
- * appending a second set.
- *
- * These are `aria-pressed` buttons rather than checkboxes because they're direct
- * manipulation of what's on screen, not a form to submit. Each is a full 44x44
- * (see `.layer-toggle` in `src/ui/layers.css`) — this is a phone app.
+ * Kept as a stable no-op so `src/main.ts` keeps compiling and the wiring for the feature
+ * survives in one obvious place.
  */
 export function mountLayerToggles(
-  root: HTMLElement,
-  onToggle: (id: LayerId, on: boolean) => void,
+  _root: HTMLElement,
+  _onToggle: (id: LayerId, on: boolean) => void,
 ): void {
-  root.replaceChildren()
-
-  const group = document.createElement('div')
-  group.className = 'layer-toggles'
-  group.setAttribute('role', 'group')
-  group.setAttribute('aria-label', 'Map layers')
-
-  for (const spec of TOGGLES) {
-    let on = spec.initial
-
-    const button = document.createElement('button')
-    button.type = 'button'
-    button.className = 'layer-toggle'
-    button.dataset['layer'] = spec.id
-    button.setAttribute('data-testid', `layer-toggle-${spec.id}`)
-    button.setAttribute('aria-pressed', String(on))
-    // The name never depends on the label being visible — below 900px it isn't.
-    button.setAttribute('aria-label', spec.name)
-    button.title = spec.name
-
-    const glyph = document.createElement('span')
-    glyph.className = `layer-toggle__glyph layer-toggle__glyph--${spec.id}`
-    glyph.setAttribute('aria-hidden', 'true')
-
-    const label = document.createElement('span')
-    label.className = 'layer-toggle__label'
-    label.setAttribute('aria-hidden', 'true')
-    label.textContent = spec.label
-
-    button.append(glyph, label)
-    button.addEventListener('click', () => {
-      on = !on
-      button.setAttribute('aria-pressed', String(on))
-      onToggle(spec.id, on)
-    })
-
-    group.append(button)
-  }
-
-  root.append(group)
+  /* Intentionally empty. The layers are on by default and stay on. */
 }

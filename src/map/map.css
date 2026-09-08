@@ -9,8 +9,16 @@
    least var(--tap) (44px) in both axes, achieved with a transparent padded hit
    area around a much smaller visible dot. Fingers are imprecise; dots are not.
 
-   COLOUR RULE (SPEC §4): --gold belongs to the student's own class buildings.
-   Room pins are gold because they mark exactly that. POIs are --cyan, always.
+   COLOUR RULE (docs/REDESIGN.md §1): --gold is terracotta and belongs to the
+   student's own class buildings. Room pins are terracotta because they mark
+   exactly that. POIs are --cyan (sage), always. Two accents, nothing else.
+
+   ⚠ NO GLOWS ON PAPER. The dark theme separated a marker from the map with a
+   halo — `box-shadow: 0 0 16px rgba(...)`. Over a light ground that same halo is
+   a grey smudge, and it makes a crisp dot look like a printing error. Every
+   marker here is lifted the way ink is lifted off a page instead: an opaque
+   var(--void) ring that cuts the marker out of whatever is behind it, and one
+   soft *downward* shadow under it. Rings and offsets, never a symmetric bloom.
 
    ⚠ HARD RULE — NEVER animate or transition `transform` on a marker ROOT element.
    MapLibre writes `element.style.transform = "translate(-50%,-50%) translate(Xpx,Ypx)"`
@@ -52,16 +60,18 @@
   padding: 7px 10px;
   border-radius: var(--radius-sm);
   background: var(--glass);
-  border: 1px solid var(--gold-dim);
-  box-shadow:
-    0 2px 14px rgba(0, 0, 0, 0.55),
-    0 0 18px rgba(255, 182, 39, 0.22);
+  /* A hairline, not a coloured outline: the terracotta type is already the loudest
+     thing on the chip, and a terracotta border around it doubles the shout. */
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--shadow);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   white-space: nowrap;
 }
 
-/* The line that ties the chip to the ground, so the label reads as *placed*. */
+/* The line that ties the chip to the ground, so the label reads as *placed*.
+   Fading from the pale token up into full terracotta keeps it a drawn leader line
+   rather than a hard bar hanging off the chip. */
 .room-pin__stem {
   width: 1px;
   height: 14px;
@@ -73,9 +83,14 @@
   height: 10px;
   border-radius: 50%;
   background: var(--gold);
+  /* Ring cuts the dot out of the map; the offset shadow puts it above the ground.
+     Fallback first (plain tokens), then the tuned color-mix for browsers that have it. */
   box-shadow:
-    0 0 0 3px rgba(255, 182, 39, 0.18),
-    0 0 16px 3px rgba(255, 182, 39, 0.55);
+    0 0 0 3px var(--void),
+    0 2px 4px var(--glass-border);
+  box-shadow:
+    0 0 0 3px var(--void),
+    0 2px 4px color-mix(in srgb, var(--text) 28%, transparent);
 }
 
 /* `translate`, not `transform`: this element is MapLibre's, and MapLibre owns its
@@ -93,7 +108,7 @@
 }
 
 /* ------------------------------------------------------------
-   POI marker — a tour stop. Cyan, smaller than a room pin, tappable.
+   POI marker — a tour stop. Sage, smaller than a room pin, tappable.
    ------------------------------------------------------------ */
 
 .poi-marker {
@@ -115,14 +130,18 @@
 }
 
 .poi-marker__dot {
-  width: 11px;
-  height: 11px;
+  /* A hair larger than the dark theme's 11px: that dot was doing half its work with a
+     14px glow, and once the glow goes the dot has to hold the ground on its own. */
+  width: 12px;
+  height: 12px;
   border-radius: 50%;
   background: var(--cyan);
   box-shadow:
-    0 0 0 2px rgba(11, 16, 32, 0.9),
-    0 0 0 3px rgba(77, 216, 230, 0.35),
-    0 0 14px 2px rgba(77, 216, 230, 0.5);
+    0 0 0 3px var(--void),
+    0 2px 4px var(--glass-border);
+  box-shadow:
+    0 0 0 3px var(--void),
+    0 2px 4px color-mix(in srgb, var(--text) 28%, transparent);
   transition: transform var(--dur-fast) var(--ease);
 }
 
@@ -135,6 +154,8 @@
   outline: none;
 }
 
+/* Focus is the one place a hard ring beats a soft shadow: it has to be unmistakable.
+   Paper gap first so the sage ring never touches the sage dot. */
 .poi-marker:focus-visible .poi-marker__dot {
   box-shadow:
     0 0 0 2px var(--void),

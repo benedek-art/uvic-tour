@@ -147,7 +147,7 @@ describe('detail card', () => {
       const { view } = mountDetail(session)
       const button = view.el.querySelector('[data-testid="route-from-home-btn"]')
       expect(button, session.course.code).not.toBeNull()
-      expect(button!.textContent).toBe('Route from home')
+      expect(button!.textContent).toBe('Walk from home')   // plain-language rename in the redesign
     }
   })
 

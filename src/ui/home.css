@@ -5,10 +5,11 @@
    Deliberately a separate file from ui.css: this is one small, self-contained
    idea and it should be deletable in one move.
 
-   Colour rule (SPEC §4): --gold is reserved for the student's own class
-   buildings. Home is where they start, not a destination on the map, so it
-   takes a quiet --cyan-adjacent accent instead. Translucency is mixed from the
-   token rather than hardcoded, so the palette stays single-source.
+   Colour rule (SPEC §4, docs/REDESIGN.md §1): terracotta is reserved for the
+   student's own class buildings and for primary buttons. Home is where they
+   start, not a destination and not the primary action of the detail card, so it
+   takes the sage accent instead. Translucency is mixed from the token rather
+   than hardcoded, so the palette stays single-source and no raw hex appears.
    ============================================================ */
 
 /* The "8 min from home · leave by 08:22" line in the Now/Next card.
@@ -17,22 +18,23 @@
    .nn-note so the card doesn't grow a new shape. */
 .nn-walk[data-kind='home'] {
   padding-left: var(--s2);
-  border-left: 2px solid color-mix(in srgb, var(--cyan) 55%, transparent);
+  border-left: 2px solid color-mix(in srgb, var(--cyan) 60%, transparent);
   color: var(--text);
 }
 
-/* "Route from home" in the detail card. Same silhouette as .dc-route-btn so the
-   two actions read as a pair, cyan so the class route stays the gold one. */
+/* "Walk from home" in the detail card — the secondary of the two walks, so it is
+   an outline where .dc-route-btn is a fill. Sage, so the class-to-class walk keeps
+   the terracotta that means "primary". */
 .dc-route-home-btn {
   display: block;
   width: 100%;
   min-height: var(--tap);
   margin-top: var(--s2);
   padding: 0 var(--s4);
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 600;
   color: var(--cyan);
-  border: 1px solid color-mix(in srgb, var(--cyan) 42%, transparent);
+  border: 1.5px solid color-mix(in srgb, var(--cyan) 40%, transparent);
   border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--cyan) 6%, transparent);
   transition: background var(--dur-fast) var(--ease);
@@ -42,7 +44,10 @@
   background: color-mix(in srgb, var(--cyan) 16%, transparent);
 }
 
-/* When it is the only action, it stands where the route button would have. */
+/* When it is the only action, it stands where the primary would have — bigger,
+   and clear of the block above it. */
 .dc-route-home-btn:first-of-type {
+  min-height: 52px;
   margin-top: var(--s4);
+  font-size: 16px;
 }

@@ -44,8 +44,8 @@ export default defineConfig({
         description: 'Your Fall 2026 campus map — classes, routes, and the good spots.',
         display: 'standalone',
         orientation: 'portrait',
-        background_color: '#05070E',
-        theme_color: '#FFB627',
+        background_color: '#F4F0E8',
+        theme_color: '#F4F0E8',
         start_url: '.',
         scope: '.',
         icons: [

@@ -1,5 +1,5 @@
 /**
- * The MapLibre style object for "Night Campus".
+ * The MapLibre style object for "Warm Paper".
  *
  * ARCHITECTURAL RULE — READ BEFORE EDITING
  * ----------------------------------------
@@ -13,9 +13,41 @@
  *   2. There are no `symbol`/text layers, because those require a glyph server (a network
  *      fetch). All labels in this app are HTML DOM markers instead.
  *
- * Colours are the locked tokens from `src/tokens.css` (SPEC §4). They are duplicated here
- * as literals because MapLibre paints into a WebGL canvas and cannot read CSS custom
- * properties. If a token changes, change it there first, then mirror it here.
+ * Colours are the locked tokens from `src/tokens.css` (docs/REDESIGN.md). They are
+ * duplicated here as literals because MapLibre paints into a WebGL canvas and cannot read
+ * CSS custom properties — this file is the one sanctioned place for colour literals, and
+ * every literal below is a verbatim copy of a token. If a token changes, change it there
+ * first, then mirror it here. Never invent a value that isn't in tokens.css.
+ *
+ * LIGHT THEME — WHERE THE DEPTH COMES FROM
+ * ----------------------------------------
+ * The old dark theme got depth for free: anything glowing read as near, anything dim read
+ * as far. On warm paper there is no glow to spend, so the model is built out of *value*:
+ * ground is the lightest plane, roofs step down from it, and walls step down again. All of
+ * that separation is produced by the `light` rig below rather than by extra layers, because
+ * MapLibre gives a `fill-extrusion` exactly one colour and then shades its faces.
+ *
+ * The relevant half of MapLibre's fill-extrusion vertex shader is:
+ *
+ *     directional = clamp(dot(faceNormal, lightPos), 0, 1)
+ *     directional = mix(1 - intensity, max(1 - colorvalue + intensity, 1), directional)
+ *     if (wall) directional *= clamp(..., mix(0.7, 0.98, 1 - intensity), 1)   // vertical gradient
+ *     rgb = (color + 0.03) * directional
+ *
+ * Read off that: the shader can only ever *darken* the colour you give it. So the colour
+ * set on the layer is effectively the **roof** colour — roofs face the light and come back
+ * almost untouched — and the walls are what the rig drives down. Hence:
+ *
+ *   `fill-extrusion-color` = `--bldg`  ->  roofs land at ~`--bldg`
+ *   the light rig           ->  sunlit walls land near `--bldg-edge`, shadow walls below it
+ *
+ * `--bldg-edge` is therefore expressed as the *edge* of the mass rather than painted onto a
+ * second layer: a separate roof-cap layer would double the extrusion draw calls and force
+ * the rise animation in `scene.ts` to drive four layers instead of two.
+ *
+ * Also note the `if (wall)` above: MapLibre's vertical gradient only touches faces with a
+ * horizontal normal, so turning it ON darkens walls without ever dulling a roof. On a light
+ * theme that is exactly the effect we want, so it is on for both building layers.
  */
 
 import type { MapOptions } from 'maplibre-gl'
@@ -38,12 +70,80 @@ export const CAMPUS_BBOX: [number, number, number, number] = [
   meta.bbox[3] as number,
 ]
 
-// --- palette (mirrors src/tokens.css — SPEC §4) ------------------------------------------
-export const COLOR_VOID = '#05070E'
-export const COLOR_BLDG = '#18213A'
-export const COLOR_PATH = '#1E2E4D'
-/** RESERVED: the student's own class buildings and nothing else. */
-export const COLOR_GOLD = '#FFB627'
+// --- palette (mirrors src/tokens.css — docs/REDESIGN.md §1) -------------------------------
+/** `--void`. The paper the chrome sits on; the map ground is a half-step deeper than this. */
+export const COLOR_VOID = '#F4F0E8'
+/** `--ground`. The campus ground plane, and the lightest thing in the scene. */
+export const COLOR_GROUND = '#EAE4D8'
+/** `--bldg`. Ordinary buildings — read as the roof value; see the lighting note above. */
+export const COLOR_BLDG = '#D9D1C3'
+/** `--bldg-edge`. The value ordinary walls are lit down through. Kept for reference. */
+export const COLOR_BLDG_EDGE = '#C7BEAD'
+/** `--path`. Footpaths, drawn as fine lines rather than lit filaments. */
+export const COLOR_PATH = '#D7CFC0'
+/** `--gold` — terracotta. RESERVED: the student's own class buildings and nothing else. */
+export const COLOR_GOLD = '#C0562F'
+
+// --- the light rig -----------------------------------------------------------------------
+
+/**
+ * `anchor: 'viewport'` — the light is fixed to the *screen*, not to the campus.
+ *
+ * With `'map'` the sun is pinned to north, so spinning the campus swings the shadows around
+ * and half the buildings fall into their dark side depending on which way the user happens
+ * to be facing. On a light theme that costs legibility for a gimmick: the whole reason to
+ * shade at all here is so a building reads as a solid. Fixing the light to the viewport
+ * means every building is lit the same way at every bearing.
+ */
+export const LIGHT_ANCHOR = 'viewport'
+
+/**
+ * `[r, azimuth, polar]`.
+ *   - `r` 1.15 — the vector length; it scales the dot product before it is clamped, so a
+ *     little over 1 keeps roofs at full colour instead of slightly grey.
+ *   - `azimuth` 205°. 0° is the top of the viewport and degrees run clockwise, so 180° is
+ *     the bottom of the screen — the direction the camera is looking *from*.
+ *   - `polar` 35° — 0° is straight overhead, 90° is the horizon. At 35° a roof (normal up)
+ *     gets a dot of ~0.94 and a wall gets at most ~0.66, which is the roof-versus-wall
+ *     separation the model is built on. Pushing this toward the horizon flattens the roofs;
+ *     pulling it to 0 flattens the walls.
+ *
+ * The azimuth is the number that was wrong for a whole iteration, so it is worth spelling
+ * out. 315° (upper-left) is the drafting convention and it looks like the obvious choice —
+ * but at pitch 50 the only walls on screen are the ones facing the *viewer*, whose normals
+ * point at ~180°. A light at 315° is 135° away from those, the dot product clamps to zero,
+ * and every single visible wall lands on the shadow value: the campus renders as flat dark
+ * stencils with pale lids, which is the light-theme version of a washed-out blob. Measured
+ * off a screenshot, one wall tone accounted for 5.2% of the map and no lit tone appeared at
+ * all.
+ *
+ * 205° sits just off the viewer's shoulder, which is what gives the visible faces a range
+ * instead of a single tone:
+ *
+ *     face pointing down-screen (toward camera)   L* ~66   lit
+ *     face pointing screen-left                   L* ~57   half
+ *     face pointing screen-right                  L* ~49   shadow
+ *
+ * Three wall values plus the roof is what makes a box read as a box. Rotating this back
+ * toward 270-315 costs all of it.
+ */
+export const LIGHT_POSITION: [number, number, number] = [1.15, 205, 35]
+
+/**
+ * How hard the rig bites. From the shader above, an unlit wall is multiplied by
+ * `1 - intensity`, so this is really "how dark is the shadow side".
+ *
+ * 0.5 (the spec default) drove shadow walls down to roughly 40% luminance — on paper that
+ * reads as dirt, not shade. 0.38 lands the four planes of the model at roughly:
+ *
+ *     ground  L* 90   (--ground, untouched)
+ *     roof    L* 85   (~--bldg)
+ *     lit wall L* 67
+ *     shadow wall L* 50
+ *
+ * — a legible architectural stack that still leaves the page feeling calm.
+ */
+export const LIGHT_INTENSITY = 0.44
 
 // --- art direction knobs -----------------------------------------------------------------
 
@@ -59,8 +159,14 @@ export const HEIGHT_SCALE = 3.2
 export const RISE_STAGGER = 0.45
 export const RISE_SPAN = 0.55
 
-/** Resting opacity of the ambient footpath tracery. */
-export const PATH_OPACITY = 0.85
+/**
+ * Resting opacity of the footpath tracery.
+ *
+ * On the dark theme these were luminous filaments and 0.85 let them bloom. `--path` on
+ * `--ground` is only about six L* apart, so any opacity taken off them here is contrast the
+ * paths do not have to spare — they are drawn at full strength and kept fine instead.
+ */
+export const PATH_OPACITY = 1
 
 export const LAYER_BUILDINGS = 'buildings-3d'
 export const LAYER_HERO = 'buildings-hero'
@@ -110,21 +216,37 @@ export function campusStyle(buildings: unknown, paths: unknown): StyleSpecificat
   const style = {
     version: 8,
     // No `glyphs` and no `sprite`: no symbol layers, therefore no network fetch. See header.
-    name: 'Night Campus',
+    name: 'Warm Paper',
+
+    // The rig every extrusion in this style is shaded by. See the block comment at the top
+    // of the file for what each number buys.
+    light: {
+      anchor: LIGHT_ANCHOR,
+      position: LIGHT_POSITION,
+      intensity: LIGHT_INTENSITY,
+      // `color` is deliberately left at its white default: the warmth in this scene should
+      // come from the building colours, not from a tinted lamp laid over everything.
+    },
+
     sources: {
       buildings: { type: 'geojson', data: buildings },
       paths: { type: 'geojson', data: paths },
     },
     layers: [
-      // 1. The void the campus floats in.
+      // 1. The ground plane. The lightest surface in the scene, and a half-step deeper than
+      //    the `--void` paper the cards and the top bar sit on, so the map reads as a
+      //    surface laid on the page rather than as a hole cut out of it.
       {
         id: 'background',
         type: 'background',
-        paint: { 'background-color': COLOR_VOID },
+        paint: { 'background-color': COLOR_GROUND },
       },
 
-      // 2. Footpaths — thin luminous traces. `line-blur` is what makes them read as lit
-      //    filaments rather than hairlines.
+      // 2. Footpaths — fine drawn lines. The old style blurred these to make them glow;
+      //    `line-blur: 0` is the whole difference between a lit filament and a pen line,
+      //    and a pen line is what survives on paper. Widths are up a notch on the dark
+      //    theme's because `--path` on `--ground` is a very quiet contrast and a hairline
+      //    at zoom 14.8 would simply disappear.
       {
         id: LAYER_PATHS,
         type: 'line',
@@ -133,14 +255,14 @@ export function campusStyle(buildings: unknown, paths: unknown): StyleSpecificat
         paint: {
           'line-color': COLOR_PATH,
           'line-opacity': PATH_OPACITY,
-          'line-blur': 0.6,
-          'line-width': ['interpolate', ['linear'], ['zoom'], 13, 0.5, 15, 1.1, 18, 2.4],
+          'line-blur': 0,
+          'line-width': ['interpolate', ['linear'], ['zoom'], 13, 0.7, 15, 1.4, 18, 3],
         },
       },
 
       // 3. Every ordinary building. Starts at height 0 — `playRiseAnimation` ramps it up.
-      //    `fill-extrusion-vertical-gradient` darkens the walls automatically, which is
-      //    where the sense of depth comes from without any lighting rig.
+      //    Opaque: at 0.92 the ground showed through the walls and the shading the light rig
+      //    works so hard for got washed straight back out.
       {
         id: LAYER_BUILDINGS,
         type: 'fill-extrusion',
@@ -148,15 +270,18 @@ export function campusStyle(buildings: unknown, paths: unknown): StyleSpecificat
         filter: ordinaryFilter([]),
         paint: {
           'fill-extrusion-color': COLOR_BLDG,
-          'fill-extrusion-opacity': 0.92,
+          'fill-extrusion-opacity': 1,
           'fill-extrusion-vertical-gradient': true,
           'fill-extrusion-base': 0,
           'fill-extrusion-height': riseHeightExpression(0),
         },
       },
 
-      // 4. The three class buildings. Gold, opaque, and deliberately flat-lit so they read
-      //    as the brightest things on screen. Gold appears nowhere else in the app.
+      // 4. The three class buildings. Terracotta — the one saturated thing on the whole
+      //    page, and the only reason the user can find their class at a glance. Shaded by
+      //    the same rig as everything else (the dark theme flat-lit these to make them glow;
+      //    on paper a flat patch of colour reads as a sticker, and a shaded solid reads as
+      //    a building). Terracotta against beige carries the hierarchy on hue alone.
       {
         id: LAYER_HERO,
         type: 'fill-extrusion',
@@ -165,7 +290,7 @@ export function campusStyle(buildings: unknown, paths: unknown): StyleSpecificat
         paint: {
           'fill-extrusion-color': COLOR_GOLD,
           'fill-extrusion-opacity': 1,
-          'fill-extrusion-vertical-gradient': false,
+          'fill-extrusion-vertical-gradient': true,
           'fill-extrusion-base': 0,
           'fill-extrusion-height': riseHeightExpression(0),
         },

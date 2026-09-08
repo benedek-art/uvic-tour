@@ -118,7 +118,7 @@ test.describe('UVic Tour', () => {
     await page.locator('.tour-launch').first().click()
     const overlay = page.locator('#tour-overlay')
     await expect(overlay).toBeVisible({ timeout: 15_000 })
-    await expect(overlay).toContainText('1 / 8')
+    await expect(overlay).toContainText('Stop 1 of 8')
     await page.keyboard.press('Escape')
     await expect(overlay).toBeHidden({ timeout: 10_000 })
     await expect(page.getByTestId('bottom-sheet')).toBeVisible()
@@ -129,7 +129,6 @@ test.describe('UVic Tour', () => {
     // Regression: the place card floats at a fixed offset from the resting chrome.
     // Expanding the sheet used to leave it on top, making that band of the sheet
     // untappable and undraggable.
-    await page.locator('.legend__dismiss').click()
     await page.locator('.poi-marker').first().click({ force: true })
     await expect(page.locator('#place-card')).toBeVisible()
 

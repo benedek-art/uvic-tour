@@ -1,132 +1,129 @@
-/* Floating place card. Sits above the scrubber so it never fights the sheet's drag. */
+/* ============================================================
+   Place card — the only informational surface that floats over the map.
+
+   Warm Paper (docs/REDESIGN.md): tokens only, never a raw hex, and not one `0 0 Npx`
+   glow anywhere in this file. Depth is a soft DOWNWARD shadow plus a hairline border.
+
+   One shape, every time: eyebrow, big title, one line, one filled button. The hierarchy
+   is carried by size and weight (11 / 24 / 15 / 16-bold), not by colour — the only two
+   colours on the card are the eyebrow's accent and the terracotta button.
+
+   Sits above the week panel so it never fights the sheet's drag gesture; place-card.ts
+   also asks that panel to collapse on open, so the two can't stack.
+   ============================================================ */
+
 .place {
   position: absolute;
   left: calc(var(--safe-l) + var(--s3));
   right: calc(var(--safe-r) + var(--s3));
   bottom: calc(var(--chrome-bottom, 380px) + var(--s3));
-  z-index: 25;              /* above the scrubber (8) and sheet (20), below the tour (40) */
+  z-index: 25;              /* above the week panel (8) and sheet (20), below the tour (40) */
   padding: var(--s4);
   border-radius: var(--radius);
   border: 1px solid var(--glass-border);
   background: var(--glass);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
-  box-shadow: 0 18px 40px rgba(0, 0, 0, .5);
+  box-shadow: var(--shadow-lg);
   animation: place-in var(--dur) var(--ease);
 }
+
 @keyframes place-in {
   from { opacity: 0; transform: translateY(10px); }
   to   { opacity: 1; transform: translateY(0); }
 }
 
+/* ---------- close ---------- */
+
 .place__close {
   position: absolute;
-  top: 4px;
-  right: 4px;
+  top: 2px;
+  right: 2px;
   width: var(--tap);
   height: var(--tap);
   display: grid;
   place-items: center;
   color: var(--text-dim);
-  font-size: 15px;
+  font-size: 16px;
+  line-height: 1;
   border-radius: var(--radius-sm);
 }
-.place__close:active { color: var(--text); }
 
+.place__close:active { color: var(--text); background: var(--hairline); }
+
+.place__close:focus-visible { outline: 2px solid var(--cyan); outline-offset: -2px; }
+
+/* ---------- eyebrow / title / line ---------- */
+
+/* Two quiet words. Sage = a place worth knowing; terracotta = one of yours. This is the
+   whole of the map's colour grammar, restated every time you tap something. */
 .place__eyebrow {
-  margin: 0 0 2px;
+  margin: 0 var(--tap) 2px 0;
   font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: .16em;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .14em;
   text-transform: uppercase;
   color: var(--cyan);
 }
+
 .place[data-kind='class'] .place__eyebrow { color: var(--gold); }
 
 .place__title {
-  margin: 0 var(--tap) var(--s2) 0;
-  font-size: 20px;
+  margin: 0 var(--tap) var(--s2) 0;   /* clear of the close button */
+  font-size: 24px;
   font-weight: 600;
-  line-height: 1.15;
+  line-height: 1.12;
+  letter-spacing: -.01em;
   color: var(--text);
 }
 
+/* --text-dim on paper, not a hairline grey: this line has to survive being read at arm's
+   length in daylight. */
 .place__body {
   margin: 0;
-  font-size: 14px;
+  font-size: 15px;
   line-height: 1.45;
   color: var(--text-dim);
 }
 
-.place__classes { margin: 0; padding: 0; list-style: none; display: grid; gap: var(--s2); }
-.place__classes li {
-  display: grid;
-  grid-template-columns: auto 1fr auto;
-  align-items: baseline;
-  gap: var(--s2);
-  padding-left: var(--s2);
-  border-left: 2px solid var(--gold);
-}
-.place__code { font-size: 15px; font-weight: 600; color: var(--text); }
-.place__when { font-size: 11px; color: var(--text-dim); }
-.place__room { font-size: 11px; color: var(--text-dim); }
+/* ---------- the one action ---------- */
 
-.place__actions { margin-top: var(--s3); }
+.place__actions { margin-top: var(--s4); }
+
+/* Filled terracotta, full width, plain words. The single primary action on the screen. */
 .place__route {
+  display: block;
   width: 100%;
-  min-height: var(--tap);
+  min-height: 52px;         /* comfortably past the 44px floor — this is THE button */
+  padding: 0 var(--s4);
+  border: none;
   border-radius: var(--radius-sm);
-  border: 1px solid var(--gold-dim);
-  color: var(--gold);
-  font-size: 14px;
+  background: var(--gold);
+  color: var(--void);
+  font-family: var(--font-display);
+  font-size: 16px;
   font-weight: 600;
-  background: rgba(255, 182, 39, .07);
+  letter-spacing: .01em;
 }
-.place__route:active { background: rgba(255, 182, 39, .16); }
 
-/* --- one-time legend ------------------------------------------------------------- */
-.legend {
-  position: absolute;
-  left: calc(var(--safe-l) + var(--s3));
-  right: calc(var(--safe-r) + var(--s3));
-  bottom: calc(var(--chrome-bottom, 380px) + var(--s3));
-  z-index: 24;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--s2) var(--s4);
-  padding: var(--s3) var(--s4);
-  border-radius: var(--radius);
-  border: 1px solid var(--glass-border);
-  background: var(--glass);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  font-size: 13px;
-  color: var(--text-dim);
-}
-/* The legend floats over the map, so it must not swallow pan gestures.
-   Only its dismiss button takes input. */
-.legend { pointer-events: none; }
-.legend__dismiss { pointer-events: auto; }
+.place__route:active { background: color-mix(in srgb, var(--gold) 82%, var(--text)); }
 
-.legend__row { display: inline-flex; align-items: center; gap: var(--s2); }
-.legend__swatch { width: 10px; height: 10px; border-radius: 2px; flex: none; }
-.legend__swatch--gold { background: var(--gold); box-shadow: 0 0 8px rgba(255,182,39,.6); }
-.legend__swatch--cyan { background: var(--cyan); box-shadow: 0 0 8px rgba(77,216,230,.6); }
-.legend__dismiss {
-  margin-left: auto;
-  min-height: 32px;
-  padding: 0 var(--s3);
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--glass-border);
-  color: var(--text);
-  font-size: 13px;
-  font-weight: 600;
-}
+.place__route:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+
+/* ---------- desktop ---------- */
 
 @media (min-width: 900px) {
-  .place, .legend { left: 404px; right: auto; width: 360px; bottom: var(--s5); }
+  .place {
+    left: 404px;            /* clear of the 380px left rail */
+    right: auto;
+    width: 360px;
+    bottom: var(--s5);
+  }
 }
 
-/* Sheet expanded over them: stand down. */
-.legend.is-hidden { opacity: 0; pointer-events: none; }
+/* ============================================================
+   The legend used to live here. It is gone — see the note at the foot of
+   src/ui/place-card.ts for why. Do not reintroduce a second floating panel at this
+   offset; the place card is the explanation now.
+   ============================================================ */

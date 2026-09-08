@@ -46,7 +46,9 @@ const LINE_LAYER = 'route-line'
 const DASH_LAYER = 'route-dash'
 
 /** `--route` from src/tokens.css. WebGL can't read CSS custom properties. */
-const COLOR_ROUTE = '#FFD873'
+// Terracotta, matching --route in tokens.css. The old '#FFD873' was dark-theme gold
+// and all but vanished on the warm paper ground.
+const COLOR_ROUTE = '#C0562F'
 const TRANSPARENT = 'rgba(255, 216, 115, 0)'
 
 /** SPEC §4 Motion: "Line draws on over 700 ms, then dashes flow continuously." */
@@ -184,7 +186,8 @@ function ensureLayers(map: MapLibreMap): void {
       source: SOURCE_ID,
       layout: { 'line-cap': 'butt', 'line-join': 'round' },
       paint: {
-        'line-color': '#FFFFFF',
+        // Paper-coloured dashes read as gaps in the terracotta line on a light ground.
+        'line-color': '#F4F0E8',
         'line-opacity': 0.55,
         'line-width': ['interpolate', ['linear'], ['zoom'], 13, 1, 16, 1.8, 19, 3.4],
         'line-dasharray': DASH_STEPS[0]!,

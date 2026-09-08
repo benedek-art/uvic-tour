@@ -41,7 +41,7 @@ import type { Session } from '../core/week'
 import type { Day } from '../data/schedule'
 import { createClassList } from './class-list'
 import { createDetail } from './detail-card'
-import { createNowNext } from './now-next'
+import { createNowNext, transitionBefore } from './now-next'
 
 export interface AppState {
   now: Date
@@ -68,7 +68,12 @@ export interface SheetDeps {
  * hero answer is never clipped by a hardcoded number. ~140-190 px in practice.
  */
 const PEEK_MIN_PX = 140
-const PEEK_MAX_PX = 240
+/**
+ * The peek now has to carry the primary button as well as the answer, and one of the
+ * three building names wraps to two lines, so the old 240 px ceiling clipped the
+ * button off the bottom of the card on exactly one of the five classes.
+ */
+const PEEK_MAX_PX = 320
 const HANDLE_PX = 44
 /** Fraction of the viewport the sheet occupies at the full detent. */
 const FULL_FRACTION = 0.9
@@ -122,7 +127,29 @@ export function mountSheet(root: HTMLElement, deps: SheetDeps): void {
 
   const scroll = el('div', 'sheet-scroll')
 
-  const nowNext = createNowNext({ store, onSelect: deps.onSelect })
+  /**
+   * The one big button, "Take me there" (docs/REDESIGN.md §2.1).
+   *
+   * It draws the walk that actually stands between the student and that class: from
+   * the class before it when there is one in another building, and from their room in
+   * residence otherwise — which is the case for the first class of every day.
+   *
+   * It deliberately does NOT select the class. Selecting opens the sheet to the full
+   * detent, and a button whose job is "show me the way" must not answer by covering
+   * the map with a card; instead the sheet drops back to peek so the route is the
+   * thing you are looking at.
+   */
+  function go(session: Session): void {
+    const before = transitionBefore(session)
+    if (before && before.from.course.building !== session.course.building) {
+      deps.onRoute(before.from, session)
+    } else {
+      deps.onRouteFromHome?.(session)
+    }
+    if (!isDesktop()) snapTo(0)
+  }
+
+  const nowNext = createNowNext({ store, onSelect: deps.onSelect, onGo: go })
   const detail = createDetail({
     store,
     onSelect: deps.onSelect,
@@ -150,8 +177,10 @@ export function mountSheet(root: HTMLElement, deps: SheetDeps): void {
   function peekHeight(): number {
     const card = nowNext.el.querySelector('.nn-card')
     const cardHeight = card ? card.getBoundingClientRect().height : 0
+    // +16: the card's own safe-area padding is already inside `cardHeight`, so this
+    // is purely the breathing room under the primary button.
     return Math.round(
-      Math.min(PEEK_MAX_PX, Math.max(PEEK_MIN_PX, HANDLE_PX + cardHeight + 12)),
+      Math.min(PEEK_MAX_PX, Math.max(PEEK_MIN_PX, HANDLE_PX + cardHeight + 16)),
     )
   }
 
@@ -412,7 +441,7 @@ export function mountSheet(root: HTMLElement, deps: SheetDeps): void {
   function render(state: AppState): void {
     // Only one `transition-note` may exist on the page at a time; the detail card
     // takes it whenever a class is selected.
-    nowNext.update(state, state.selected === null)
+    const heroRebuilt = nowNext.update(state, state.selected === null)
     detail.update(state)
     classList.update(state)
 
@@ -428,6 +457,15 @@ export function mountSheet(root: HTMLElement, deps: SheetDeps): void {
       }
       if (selectedId) scroll.scrollTop = 0
     }
+
+    // The peek detent is the measured height of the hero card, and that height moves
+    // when the card's subject does — "Engineering & Computer Science" wraps where
+    // "Bob Wright Centre" does not. Re-measure, but never mid-gesture: snapping the
+    // sheet out from under a finger is worse than a few clipped pixels.
+    // ...and only at peek, the one detent whose height IS the card. Re-measuring at
+    // half or full would re-snap without a transition, turning the open-on-select
+    // animation into a jump.
+    if (heroRebuilt && phase === 'idle' && detentIndex === 0) requestAnimationFrame(remeasure)
   }
 
   render(store.get())

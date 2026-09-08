@@ -25,7 +25,15 @@ import { minutesToHHMM } from '../core/time'
 import type { Session } from '../core/week'
 import { HOME_BUILDING, HOME_LABEL, walkFromHome } from '../data/home'
 import { MAIN_ENTRANCE, ROOM_HINTS, type RoomHint } from '../data/rooms'
-import { WEEK, dayList, timeRange, transitionAfter, transitionBefore } from './now-next'
+import {
+  WEEK,
+  dayList,
+  friendlyBuilding,
+  roomLabel,
+  timeRange,
+  transitionAfter,
+  transitionBefore,
+} from './now-next'
 
 /**
  * The UVic bus exchange on Finnerty Road, the north-east corner of campus — where
@@ -92,7 +100,7 @@ function el<K extends keyof HTMLElementTagNameMap>(
 
 function metaRow(term: string, value: string): HTMLElement {
   const row = el('div', 'dc-meta-row')
-  row.append(el('dt', 'dc-term mono', term), el('dd', 'dc-value', value))
+  row.append(el('dt', 'dc-term', term), el('dd', 'dc-value', value))
   return row
 }
 
@@ -134,6 +142,9 @@ export function createDetail(deps: DetailDeps): DetailView {
     const { course } = session
     root.replaceChildren()
 
+    // The header answers "which class is this" in one quiet line. The place answers
+    // "where do I go", and it is the biggest thing on the card — same priority order
+    // as the hero card, so the two never contradict each other.
     const head = el('header', 'dc-head')
     const headText = el('div', 'dc-head-text')
     const code = el('h2', 'dc-code', course.code)
@@ -142,49 +153,52 @@ export function createDetail(deps: DetailDeps): DetailView {
 
     const closeButton = el('button', 'dc-close')
     closeButton.type = 'button'
-    closeButton.setAttribute('aria-label', 'Close class detail')
+    closeButton.setAttribute('aria-label', 'Close this class')
     closeButton.textContent = '✕'
     closeButton.addEventListener('click', close)
     head.append(headText, closeButton)
 
     const dark = endsAfterDark(session, state.now)
-    const meta = el('dl', 'dc-meta')
-    meta.append(
-      metaRow(
-        'WHEN',
-        `${dayList(course.days)} · ${timeRange(course.start, course.end)}${dark ? ' 🌙' : ''}`,
+
+    const place = el('div', 'dc-place')
+    place.append(
+      el('p', 'dc-place-name', friendlyBuilding(course.building)),
+      el(
+        'p',
+        'dc-place-room mono',
+        `${roomLabel(course.room)} · ${timeRange(course.start, course.end)}${dark ? ' 🌙' : ''}`,
       ),
-      metaRow('WHERE', `${course.building} · ${course.room}`),
-      metaRow('PROF', course.instructor),
-      metaRow('CRN', `${course.crn} · ${course.units} units`),
     )
 
-    root.append(head, meta)
+    root.append(head, place)
 
     // --- room decoder: the reason this card exists (SPEC §5.7) -------------------
     const hint = roomHintFor(course.building, course.room)
     if (hint) {
       const decoder = el('section', 'dc-decoder')
-      decoder.append(el('h3', 'dc-decoder-head mono', 'FINDING THE ROOM'))
+      decoder.append(el('h3', 'dc-decoder-head', 'How to find the room'))
       const generic = hint.room === MAIN_ENTRANCE
       decoder.append(
         el(
           'p',
           'dc-decoder-where mono',
           generic
-            ? `${hint.building} · wing ${hint.wing}`
-            : `${course.room} · wing ${hint.wing} · floor ${hint.floor}`,
+            ? `Wing ${hint.wing} · ${hint.building}`
+            : `Wing ${hint.wing} · Floor ${hint.floor} · ${roomLabel(course.room)}`,
         ),
       )
       const entrance = el('p', 'dc-decoder-entrance')
-      entrance.append(el('strong', undefined, 'Enter: '), document.createTextNode(hint.entrance))
+      entrance.append(
+        el('strong', undefined, 'Go in here: '),
+        document.createTextNode(hint.entrance),
+      )
       decoder.append(entrance, el('p', 'dc-decoder-directions', hint.directions))
       if (generic) {
         decoder.append(
           el(
             'p',
             'dc-decoder-fallback',
-            `No hand-written hint for ${course.room} yet — this is the way in.`,
+            `Nobody has written a note for ${roomLabel(course.room).toLowerCase()} yet — this is the way in.`,
           ),
         )
       }
@@ -220,7 +234,9 @@ export function createDetail(deps: DetailDeps): DetailView {
     // summary line, which is only appended if at least one button exists — an empty
     // "—" under no buttons would read as broken.
     const pair = routePair(session)
-    const summary = el('p', 'dc-route-summary mono', '—')
+    // Empty until a walk is actually asked for. A bare em dash sitting under the
+    // buttons reads as a broken row; ui.css hides it while it has nothing to say.
+    const summary = el('p', 'dc-route-summary mono', '')
     summary.setAttribute('data-testid', 'route-summary')
     summary.setAttribute('aria-live', 'polite')
     let hasAction = false
@@ -231,14 +247,14 @@ export function createDetail(deps: DetailDeps): DetailView {
       button.setAttribute('data-testid', 'route-btn')
       button.textContent =
         pair.to.course.id === course.id
-          ? `Route from ${pair.from.course.code}`
-          : `Route to ${pair.to.course.code}`
+          ? `Walk here from ${pair.from.course.code}`
+          : `Walk from here to ${pair.to.course.code}`
 
       button.addEventListener('click', () => {
         const from = buildingCentroid(pair.from.course.building)
         const to = buildingCentroid(pair.to.course.building)
         if (pair.from.course.building === pair.to.course.building) {
-          summary.textContent = `Same building — 0 min walk.`
+          summary.textContent = 'Same building — no walking.'
         } else if (from && to) {
           const r = route(from, to)
           summary.textContent = r
@@ -265,7 +281,7 @@ export function createDetail(deps: DetailDeps): DetailView {
       homeButton.type = 'button'
       homeButton.setAttribute('data-testid', 'route-from-home-btn')
       homeButton.title = `From ${HOME_BUILDING}`
-      homeButton.textContent = `Route from ${HOME_LABEL.toLowerCase()}`
+      homeButton.textContent = `Walk from ${HOME_LABEL.toLowerCase()}`
 
       homeButton.addEventListener('click', () => {
         summary.textContent = `${Math.round(homeWalk.metres)} m · ${homeWalk.minutes} min from ${HOME_LABEL.toLowerCase()}`
@@ -277,6 +293,18 @@ export function createDetail(deps: DetailDeps): DetailView {
     }
 
     if (hasAction) root.append(summary)
+
+    // The paperwork, last and quietest. Nothing here helps anyone find a room.
+    const meta = el('dl', 'dc-meta')
+    meta.append(
+      metaRow(
+        'Meets',
+        `${dayList(course.days)} · ${timeRange(course.start, course.end)}${dark ? ' 🌙' : ''}`,
+      ),
+      metaRow('Taught by', course.instructor),
+      metaRow('Course', `CRN ${course.crn} · ${course.units} units`),
+    )
+    root.append(meta)
   }
 
   function update(state: AppState): void {

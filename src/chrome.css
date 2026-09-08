@@ -49,7 +49,12 @@
   }
 }
 
-/* Boot overlay */
+/* Boot overlay.
+ *
+ * This is the first paint of every cold start and every PWA launch, so it is the one
+ * surface that absolutely must be theme-correct: a dark boot screen under a warm-paper app
+ * flashes black for a few hundred ms on every single load, which is the most visible bug in
+ * the whole redesign. It is built out of --void and --text and nothing else. */
 #boot {
   position: absolute;
   inset: 0;
@@ -59,6 +64,7 @@
   justify-items: center;
   gap: var(--s4);
   background: var(--void);
+  color: var(--text);
   transition: opacity var(--dur-slow) var(--ease);
 }
 #boot.is-gone { opacity: 0; }
@@ -70,15 +76,22 @@
   text-transform: uppercase;
   color: var(--text-dim);
 }
+/* Terracotta, not --gold-dim. --gold-dim is now a pale wash that was legible against
+   midnight and is all but invisible against paper — the mark has to be the full accent to
+   read as a deliberate loading state rather than a rendering fault. */
 .boot-mark {
   width: 34px;
   height: 34px;
   border-radius: 6px;
-  background: var(--gold-dim);
+  background: var(--gold);
   animation: boot-pulse 1.4s var(--ease) infinite;
 }
+/* Safe to animate `transform` here: .boot-mark is a plain div in our own overlay, not a
+   MapLibre marker element. See the hard rule at the top of src/map/map.css.
+   The opacity floor is lifted from .55 to .7 — on a light ground a translucent mark reads
+   as washed out long before it reads as pulsing. */
 @keyframes boot-pulse {
-  0%, 100% { transform: rotate(45deg) scale(.82); opacity: .55; }
+  0%, 100% { transform: rotate(45deg) scale(.82); opacity: .7; }
   50%      { transform: rotate(45deg) scale(1);   opacity: 1; }
 }
 
