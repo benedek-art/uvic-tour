@@ -123,4 +123,20 @@ test.describe('UVic Tour', () => {
     await expect(overlay).toBeHidden({ timeout: 10_000 })
     await expect(page.getByTestId('bottom-sheet')).toBeVisible()
   })
+
+  test('map overlays stand down when the sheet expands over them', async ({ page }) => {
+    await boot(page)
+    // Regression: the place card floats at a fixed offset from the resting chrome.
+    // Expanding the sheet used to leave it on top, making that band of the sheet
+    // untappable and undraggable.
+    await page.locator('.legend__dismiss').click()
+    await page.locator('.poi-marker').first().click({ force: true })
+    await expect(page.locator('#place-card')).toBeVisible()
+
+    const handle = page.locator('.sheet-handle').first()
+    await handle.click({ force: true })
+    await handle.click({ force: true })
+    await expect(page.locator('#sheet')).toHaveAttribute('data-detent', /half|full/, { timeout: 10_000 })
+    await expect(page.locator('#place-card')).toBeHidden()
+  })
 })

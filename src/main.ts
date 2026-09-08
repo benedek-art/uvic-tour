@@ -32,7 +32,10 @@ import { mountSheet, type AppState } from './ui/sheet'
 import { mountScrubber } from './ui/scrubber'
 import { mountLayerToggles } from './ui/layers'
 import { mountTourButton, startTour, stopTour } from './ui/tour'
-import { showPOICard, showBuildingCard, hidePlaceCard, mountLegend } from './ui/place-card'
+import {
+  showPOICard, showBuildingCard, hidePlaceCard, mountLegend,
+  dismissMapOverlays, restoreLegend,
+} from './ui/place-card'
 
 const WEEK = buildWeek(COURSES)
 
@@ -138,8 +141,11 @@ async function main(): Promise<void> {
       const chromeH = Math.round(Math.max(0, window.innerHeight - scrubEl.getBoundingClientRect().top))
       document.documentElement.style.setProperty('--chrome-bottom', `${chromeH}px`)
       scrubEl.classList.remove('is-hidden')
+      restoreLegend()
     } else {
       scrubEl.classList.add('is-hidden')
+      // The sheet is now over the map-level overlays; get them out of its way.
+      dismissMapOverlays()
     }
     // Tell the camera which part of the canvas is actually visible, so the campus is
     // framed in the clear band between the top bar and the panels instead of behind them.

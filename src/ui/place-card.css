@@ -127,3 +127,6 @@
 @media (min-width: 900px) {
   .place, .legend { left: 404px; right: auto; width: 360px; bottom: var(--s5); }
 }
+
+/* Sheet expanded over them: stand down. */
+.legend.is-hidden { opacity: 0; pointer-events: none; }

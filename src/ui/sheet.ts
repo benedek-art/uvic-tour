@@ -288,9 +288,10 @@ export function mountSheet(root: HTMLElement, deps: SheetDeps): void {
     startVisible = visible
     startScrollTop = scroll.scrollTop
     velocity = 0
+    listen()
   })
 
-  root.addEventListener('pointermove', (event: PointerEvent) => {
+  function onMove(event: PointerEvent): void {
     if (phase === 'idle' || event.pointerId !== activeId) return
 
     if (phase === 'pending') {
@@ -327,17 +328,18 @@ export function mountSheet(root: HTMLElement, deps: SheetDeps): void {
     lastTime = event.timeStamp
 
     apply(resist(startVisible + (startY - event.clientY)))
-  })
+  }
 
   /**
    * End of gesture. Also the `pointercancel` path — iOS fires that where Chrome does
    * not, and the sheet must land on a detent either way rather than freeze mid-drag.
    */
   function endDrag(event: PointerEvent): void {
-    if (phase === 'idle' || event.pointerId !== activeId) return
+    if (event.pointerId !== activeId) return
     const wasDragging = phase === 'dragging'
     phase = 'idle'
     activeId = -1
+    unlisten()
     if (root.hasPointerCapture(event.pointerId)) root.releasePointerCapture(event.pointerId)
     if (!wasDragging) return
 
@@ -359,8 +361,31 @@ export function mountSheet(root: HTMLElement, deps: SheetDeps): void {
     snapTo(nearestIndex(visible))
   }
 
-  root.addEventListener('pointerup', endDrag)
-  root.addEventListener('pointercancel', endDrag)
+  /**
+   * The rest of the gesture is followed on `window`, and ONLY between the pointerdown
+   * that started on the sheet and its release. A permanent document listener would
+   * eat the map's own pans; these cannot, because they are attached by a pointerdown
+   * the sheet already owns and every handler re-checks the pointer id.
+   *
+   * They are not redundant with listening on the sheet: pointer capture is only taken
+   * once the slop is crossed, and the very first move of an upward drag from the grab
+   * handle is already above the sheet's top edge. Bound to the sheet, that move goes
+   * to the map instead and the drag never starts at all — which is exactly how this
+   * failed with a mouse. (Touch has implicit capture from pointerdown and did not
+   * show it, so this is belt and braces for the reported bug and a real fix for pen
+   * and pointer input.)
+   */
+  function listen(): void {
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', endDrag)
+    window.addEventListener('pointercancel', endDrag)
+  }
+
+  function unlisten(): void {
+    window.removeEventListener('pointermove', onMove)
+    window.removeEventListener('pointerup', endDrag)
+    window.removeEventListener('pointercancel', endDrag)
+  }
 
   // A drag that ends over a class row must not also select it.
   root.addEventListener(

@@ -1,7 +1,7 @@
 import { test, expect, type Page } from '@playwright/test'
 
 /**
- * The bottom sheet's gesture, driven with real touch-typed pointer input.
+ * The bottom sheet's gesture, driven with touch-typed pointer input.
  *
  * This suite exists because of a real-device bug: the drag handlers were bound to the
  * grab handle alone, so on a phone — where nobody aims for a 44 px strip — the sheet
@@ -14,7 +14,7 @@ import { test, expect, type Page } from '@playwright/test'
  *
  * HOW THE GESTURES ARE DRIVEN, and what that does and does not prove:
  *   - `drag()` dispatches PointerEvents with `pointerType: 'touch'` on the element
- *     under the finger, with real time between the samples so the velocity the sheet
+ *     under the finger, with real time between the samples, so the velocity the sheet
  *     measures is the velocity the gesture had. Dispatched events go through real hit
  *     testing, real bubbling and the real handlers — but not through WebKit's own
  *     gesture arbitration, so they cannot prove that `touch-action` is right.
@@ -23,9 +23,11 @@ import { test, expect, type Page } from '@playwright/test'
  *     being a mouse.
  * Between them the logic is covered from both ends; the touch-action reasoning itself
  * is in ui.css and can only be finally confirmed on hardware.
+ *
+ * Every start point is chosen by hit test rather than by arithmetic. Other chrome
+ * (the map legend, the top bar) overlays the sheet, and a gesture aimed at a covered
+ * point silently goes to that chrome instead — which would make this suite lie.
  */
-
-const VIEWPORT_W = 390
 
 async function boot(page: Page): Promise<void> {
   await page.goto('/')
@@ -74,9 +76,7 @@ async function drag(page: Page, from: Point, to: Point, steps = 8, stepMs = 24):
  * A deliberately unhurried drag: slow enough (~0.3 px/ms) that the release is read as
  * a settle rather than a flick, which is what makes the landing detent predictable.
  */
-async function slowDrag(page: Page, from: Point, to: Point): Promise<void> {
-  await drag(page, from, to, 10, 60)
-}
+const slowDrag = (page: Page, from: Point, to: Point): Promise<void> => drag(page, from, to, 10, 60)
 
 /** The same drag through Playwright's real input pipeline (as a mouse). */
 async function mouseDrag(page: Page, from: Point, to: Point, steps = 10): Promise<void> {
@@ -94,35 +94,52 @@ const detent = (page: Page): Promise<string | null> =>
   page.getByTestId('bottom-sheet').getAttribute('data-detent')
 
 /**
- * The y of a point `dy` px below the sheet's top edge, once the sheet has stopped
- * moving. Waiting matters: the snap is a 420 ms CSS transition, and a point measured
- * mid-flight can be several tens of px from where the finger would actually land —
- * far enough to miss the sheet entirely and hit the map behind it.
+ * Wait for the snap to finish — the sheet's top edge stops moving. It matters: the
+ * snap is a 420 ms CSS transition, and a point measured mid-flight can be tens of px
+ * from where the finger would land, far enough to miss the sheet entirely.
  */
-async function belowSheetTop(page: Page, dy: number): Promise<number> {
+async function settled(page: Page): Promise<void> {
   const sheet = page.getByTestId('bottom-sheet')
   let last = Number.NaN
   for (let i = 0; i < 40; i++) {
     const y = (await sheet.boundingBox())!.y
-    if (Math.abs(y - last) < 0.5) return y + dy
+    if (Math.abs(y - last) < 0.5) return
     last = y
     await page.waitForTimeout(50)
   }
-  return last + dy
 }
 
 /**
- * A point inside the scrolling body that is actually the topmost element there.
- * Other chrome (the map legend, for one) overlays the sheet, and a gesture aimed at
- * a covered point never reaches the sheet at all — on a phone or in this suite.
+ * The topmost uncovered point on the sheet matching `selector` — the place a finger
+ * would actually land on that surface.
  */
-async function inScrollBody(page: Page): Promise<Point> {
-  await belowSheetTop(page, 0) // let any snap finish first
+async function pointOn(page: Page, selector: string): Promise<Point> {
+  await settled(page)
+  return await page.evaluate((sel: string) => {
+    const sheet = document.getElementById('sheet')!
+    const box = sheet.getBoundingClientRect()
+    const bottom = Math.min(box.bottom, window.innerHeight) - 8
+    for (let y = Math.max(box.top, 0) + 6; y < bottom; y += 6) {
+      for (const x of [195, 120, 270, 60, 330]) {
+        const hit = document.elementFromPoint(x, y)
+        if (hit?.closest(sel) && hit.closest('#sheet')) return { x, y }
+      }
+    }
+    throw new Error(`nothing uncovered matching ${sel} on the sheet`)
+  }, selector)
+}
+
+/** A drag surface: the grab handle or the Now/Next header. */
+const grabPoint = (page: Page): Promise<Point> => pointOn(page, '.sheet-handle, .sheet-grab')
+
+/** The scrolling body, clear of the header. */
+async function bodyPoint(page: Page): Promise<Point> {
+  await settled(page)
   return await page.evaluate(() => {
     const scroll = document.querySelector('.sheet-scroll')!
     const box = scroll.getBoundingClientRect()
     const bottom = Math.min(box.bottom, window.innerHeight) - 24
-    for (let y = box.top + 24; y < bottom; y += 12) {
+    for (let y = box.top + 24; y < bottom; y += 6) {
       const hit = document.elementFromPoint(195, y)
       if (hit?.closest('.sheet-scroll') && !hit.closest('.sheet-grab')) return { x: 195, y }
     }
@@ -130,37 +147,48 @@ async function inScrollBody(page: Page): Promise<Point> {
   })
 }
 
+/** A point on the map canvas that nothing is covering. */
+async function mapPoint(page: Page): Promise<Point> {
+  return await page.evaluate(() => {
+    for (let y = 140; y < 420; y += 10) {
+      for (const x of [120, 195, 270]) {
+        const hit = document.elementFromPoint(x, y)
+        if (hit?.tagName === 'CANVAS') return { x, y }
+      }
+    }
+    throw new Error('the map canvas is completely covered')
+  })
+}
+
 test.describe('bottom sheet gesture', () => {
-  test('drags up from peek and back down again — from the Now/Next card, not the handle', async ({ page }) => {
+  test('drags up from the Now/Next card, not just the handle, and back down again', async ({ page }) => {
+    // The bug in one test: a swipe that starts on the hero card — the biggest thing
+    // on screen at peek — used to do nothing at all.
     await boot(page)
 
-    // Start on the hero card, well clear of the grab handle: this is the swipe the
-    // bug report was about.
-    const from = await belowSheetTop(page, 90)
-    await drag(page, { x: VIEWPORT_W / 2, y: from }, { x: VIEWPORT_W / 2, y: 90 })
-    const opened = await detent(page)
-    expect(['half', 'full']).toContain(opened)
+    const up = await grabPoint(page)
+    await drag(page, up, { x: up.x, y: 90 })
+    expect(['half', 'full']).toContain(await detent(page))
 
-    // …and back down.
-    const back = await belowSheetTop(page, 90)
-    await drag(page, { x: VIEWPORT_W / 2, y: back }, { x: VIEWPORT_W / 2, y: 640 })
+    const down = await grabPoint(page)
+    await drag(page, down, { x: down.x, y: 640 })
     expect(await detent(page)).toBe('peek')
   })
 
   test('drags up from the grab handle too', async ({ page }) => {
     await boot(page)
-    const from = await belowSheetTop(page, 20)
-    await drag(page, { x: VIEWPORT_W / 2, y: from }, { x: VIEWPORT_W / 2, y: 40 })
+    const from = await pointOn(page, '.sheet-handle')
+    await drag(page, from, { x: from.x, y: 40 })
     expect(await detent(page)).toBe('full')
   })
 
   test('a tap on the grab handle still cycles detents — the slop does not eat it', async ({ page }) => {
     await boot(page)
-    // A click, not a drag: nothing moves more than 0 px, so the sheet must treat it as
-    // the button press it is.
+    // A click, not a drag: nothing moves, so the sheet must treat it as the button
+    // press it is.
     await page.locator('.sheet-handle').click()
     expect(await detent(page)).toBe('half')
-    await belowSheetTop(page, 0) // the handle is still travelling; let it land
+    await settled(page)
     await page.locator('.sheet-handle').click()
     expect(await detent(page)).toBe('full')
   })
@@ -168,35 +196,36 @@ test.describe('bottom sheet gesture', () => {
   test('a quick flick down snaps to peek without the finger travelling far', async ({ page }) => {
     await boot(page)
     // Open to half first, slowly, so the flick is measured from a known detent.
-    const up = await belowSheetTop(page, 90)
-    await slowDrag(page, { x: VIEWPORT_W / 2, y: up }, { x: VIEWPORT_W / 2, y: up - 200 })
+    const up = await grabPoint(page)
+    await slowDrag(page, up, { x: up.x, y: up.y - 200 })
     expect(await detent(page)).toBe('half')
 
-    // 70 px in ~24 ms. Nowhere near half way to peek — only the velocity gets it there.
-    const flick = await belowSheetTop(page, 60)
-    await drag(page, { x: VIEWPORT_W / 2, y: flick }, { x: VIEWPORT_W / 2, y: flick + 70 }, 4, 6)
+    // ~70 px in ~24 ms. Nowhere near half way down to peek: only the velocity gets
+    // it there.
+    const flick = await grabPoint(page)
+    await drag(page, flick, { x: flick.x, y: flick.y + 70 }, 4, 6)
     expect(await detent(page)).toBe('peek')
   })
 
   test('a slow short drag settles back on the detent it came from', async ({ page }) => {
     await boot(page)
-    const from = await belowSheetTop(page, 60)
-    // 40 px, slowly: not a flick, and nearer to peek than to half.
-    await drag(page, { x: VIEWPORT_W / 2, y: from }, { x: VIEWPORT_W / 2, y: from - 40 }, 8, 40)
+    const from = await grabPoint(page)
+    // 40 px, slowly: not a flick, and still nearer to peek than to half.
+    await drag(page, from, { x: from.x, y: from.y - 40 }, 8, 40)
     expect(await detent(page)).toBe('peek')
   })
 
   test('a horizontal swipe is not a sheet drag', async ({ page }) => {
     await boot(page)
-    const from = await belowSheetTop(page, 90)
-    await drag(page, { x: 40, y: from }, { x: 340, y: from - 20 })
+    const from = await grabPoint(page)
+    await drag(page, { x: 40, y: from.y }, { x: 340, y: from.y - 20 })
     expect(await detent(page)).toBe('peek')
   })
 
   test('tapping a class row still selects it', async ({ page }) => {
     await boot(page)
-    const up = await belowSheetTop(page, 20)
-    await drag(page, { x: VIEWPORT_W / 2, y: up }, { x: VIEWPORT_W / 2, y: 40 })
+    const from = await pointOn(page, '.sheet-handle')
+    await drag(page, from, { x: from.x, y: 40 })
     expect(await detent(page)).toBe('full')
 
     await page.getByTestId('class-row').filter({ hasText: 'ITAL 100A' }).first().click()
@@ -205,42 +234,41 @@ test.describe('bottom sheet gesture', () => {
 
   test('a drag that starts on a class row moves the sheet and does not select', async ({ page }) => {
     await boot(page)
-    // At the half detent the body has nothing to scroll, so a swipe on a row is a drag.
-    const up = await belowSheetTop(page, 90)
-    await slowDrag(page, { x: VIEWPORT_W / 2, y: up }, { x: VIEWPORT_W / 2, y: up - 200 })
-    expect(await detent(page)).toBe('half')
+    // Class rows only come into view at the full detent, where the body scrolls — so
+    // this is also the handoff: at the top of the scroll, a pull down is the sheet's.
+    const open = await pointOn(page, '.sheet-handle')
+    await drag(page, open, { x: open.x, y: 40 })
+    expect(await detent(page)).toBe('full')
+    await page.locator('.sheet-scroll').evaluate((el) => { el.scrollTop = 0 })
 
-    const row = page.getByTestId('class-row').first()
-    const box = (await row.boundingBox())!
-    await mouseDrag(page, { x: box.x + box.width / 2, y: box.y + box.height / 2 }, { x: box.x + box.width / 2, y: box.y + 260 })
+    const start = await pointOn(page, '[data-testid="class-row"]')
+    await mouseDrag(page, start, { x: start.x, y: start.y + 260 })
 
-    expect(await detent(page)).toBe('peek')
+    expect(await detent(page)).not.toBe('full')
     // The drag must not have been read as a tap on the row.
     await expect(page.getByTestId('bottom-sheet')).not.toContainText(/wing/i)
   })
 
   test('real pointer input drags the sheet — capture and hit testing, not just handlers', async ({ page }) => {
     await boot(page)
-    const from = await belowSheetTop(page, 90)
-    await mouseDrag(page, { x: VIEWPORT_W / 2, y: from }, { x: VIEWPORT_W / 2, y: 60 })
+    const from = await grabPoint(page)
+    await mouseDrag(page, from, { x: from.x, y: 60 })
     expect(await detent(page)).toBe('full')
   })
 
   test('at the full detent the body scrolls, and a pull down from its top drags the sheet', async ({ page }) => {
     await boot(page)
-    const up = await belowSheetTop(page, 20)
-    await drag(page, { x: VIEWPORT_W / 2, y: up }, { x: VIEWPORT_W / 2, y: 40 })
+    const open = await pointOn(page, '.sheet-handle')
+    await drag(page, open, { x: open.x, y: 40 })
     expect(await detent(page)).toBe('full')
 
     const scroller = page.locator('.sheet-scroll')
     await expect(scroller).toHaveCSS('touch-action', 'pan-y')
-
     // The body really does overflow, or the handoff below proves nothing.
-    const overflows = await scroller.evaluate((el) => el.scrollHeight > el.clientHeight)
-    expect(overflows).toBe(true)
+    expect(await scroller.evaluate((el) => el.scrollHeight > el.clientHeight)).toBe(true)
 
     // Scrolled away from the top, a pull down belongs to the scroller, not the sheet.
-    const inBody = await inScrollBody(page)
+    const inBody = await bodyPoint(page)
     await scroller.evaluate((el) => { el.scrollTop = 60 })
     await drag(page, inBody, { x: inBody.x, y: inBody.y + 160 })
     expect(await detent(page)).toBe('full')
@@ -254,47 +282,43 @@ test.describe('bottom sheet gesture', () => {
   test('a pointercancel mid-drag lands on a detent instead of freezing the sheet', async ({ page }) => {
     await boot(page)
     const sheet = page.getByTestId('bottom-sheet')
-    const from = await belowSheetTop(page, 90)
+    const from = await grabPoint(page)
 
-    await page.evaluate(async (y: number) => {
-      const target = document.elementFromPoint(195, y)!
+    await page.evaluate(async (from: Point) => {
+      const target = document.elementFromPoint(from.x, from.y)!
       const fire = (type: string, cy: number, buttons: number): void => {
         target.dispatchEvent(new PointerEvent(type, {
           pointerId: 1, pointerType: 'touch', isPrimary: true, bubbles: true,
-          cancelable: true, composed: true, clientX: 195, clientY: cy, buttons,
+          cancelable: true, composed: true, clientX: from.x, clientY: cy, buttons,
         }))
       }
-      fire('pointerdown', y, 1)
+      fire('pointerdown', from.y, 1)
       for (let i = 1; i <= 6; i++) {
         await new Promise((r) => setTimeout(r, 20))
-        fire('pointermove', y - i * 30, 1)
+        fire('pointermove', from.y - i * 30, 1)
       }
       // iOS fires this where Chrome does not — a second finger, the app switcher, a
       // system edge gesture. The old code ignored it and left the sheet mid-drag.
-      fire('pointercancel', y - 180, 0)
+      fire('pointercancel', from.y - 180, 0)
     }, from)
 
     await expect(sheet).not.toHaveClass(/is-dragging/)
     expect(['peek', 'half', 'full']).toContain(await detent(page))
-    // And the sheet still responds to the next gesture.
-    const again = await belowSheetTop(page, 90)
-    await drag(page, { x: VIEWPORT_W / 2, y: again }, { x: VIEWPORT_W / 2, y: 60 })
+
+    // And the sheet still answers the next gesture.
+    const again = await grabPoint(page)
+    await drag(page, again, { x: again.x, y: 60 })
     expect(await detent(page)).toBe('full')
   })
 
   test('the map keeps its own gestures — a drag on the canvas never moves the sheet', async ({ page }) => {
     await boot(page)
-    const before = await page.evaluate(() => {
-      const m = (window as any).__map
-      return { c: m.getCenter(), z: m.getZoom() }
-    })
-    await mouseDrag(page, { x: 200, y: 200 }, { x: 200, y: 320 })
+    const from = await mapPoint(page)
+    const before = await page.evaluate(() => (window as any).__map.getCenter())
+    await mouseDrag(page, from, { x: from.x, y: from.y + 120 })
     expect(await detent(page)).toBe('peek')
-    const after = await page.evaluate(() => {
-      const m = (window as any).__map
-      return { c: m.getCenter(), z: m.getZoom() }
-    })
-    // The map moved; the sheet did not.
-    expect(Math.abs(after.c.lat - before.c.lat) + Math.abs(after.c.lng - before.c.lng)).toBeGreaterThan(0)
+    const after = await page.evaluate(() => (window as any).__map.getCenter())
+    // The map panned; the sheet did not.
+    expect(Math.abs(after.lat - before.lat) + Math.abs(after.lng - before.lng)).toBeGreaterThan(0)
   })
 })

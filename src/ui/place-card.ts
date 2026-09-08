@@ -151,6 +151,20 @@ export function isPlaceCardOpen(): boolean {
 }
 
 /**
+ * Both of these float above the map at a fixed offset from the resting chrome.
+ * Once the sheet is dragged up they'd sit on top of it and eat taps in that band,
+ * so they stand down whenever the sheet leaves its peek detent.
+ */
+export function dismissMapOverlays(): void {
+  hidePlaceCard()
+  document.querySelector('.legend')?.classList.add('is-hidden')
+}
+
+export function restoreLegend(): void {
+  document.querySelector('.legend')?.classList.remove('is-hidden')
+}
+
+/**
  * One-time legend. Gold vs cyan is the map's entire visual grammar and nothing
  * on screen explained it. Dismissed state persists per-device.
  */
