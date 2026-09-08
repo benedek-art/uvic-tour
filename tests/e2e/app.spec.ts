@@ -30,20 +30,20 @@ test.describe('UVic Tour', () => {
     await expect(card).toContainText(/BIOL 184|BIOL 150A|ITAL 100A|PSYC 100A|PSYC 100B/)
   })
 
-  test('lists all five courses', async ({ page }) => {
+  test('lays out every session of the week', async ({ page }) => {
     await boot(page)
-    await expect(page.getByTestId('class-row')).toHaveCount(5)
+    await expect(page.getByTestId('week-class-row')).toHaveCount(12)
   })
 
   test('flying to a class drops the correct room pin', async ({ page }) => {
     await boot(page)
-    await page.getByTestId('class-row').filter({ hasText: 'ITAL 100A' }).first().click()
+    await page.getByTestId('week-class-row').filter({ hasText: 'ITAL 100A' }).first().click()
     await expect(page.getByTestId('room-pin')).toContainText('D287', { timeout: 15_000 })
   })
 
   test('surfaces the room decoder for a selected class', async ({ page }) => {
     await boot(page)
-    await page.getByTestId('class-row').filter({ hasText: 'ITAL 100A' }).first().click()
+    await page.getByTestId('week-class-row').filter({ hasText: 'ITAL 100A' }).first().click()
     const sheet = page.getByTestId('bottom-sheet')
     await expect(sheet).toContainText(/wing D/i)
     await expect(sheet).toContainText(/floor 2/i)
@@ -51,7 +51,7 @@ test.describe('UVic Tour', () => {
 
   test('draws a route with a believable distance and duration', async ({ page }) => {
     await boot(page)
-    await page.getByTestId('class-row').filter({ hasText: 'ITAL 100A' }).first().click()
+    await page.getByTestId('week-class-row').filter({ hasText: 'ITAL 100A' }).first().click()
     await page.getByTestId('route-btn').first().click()
     const summary = page.getByTestId('route-summary')
     await expect(summary).toContainText(/\d+\s*m/, { timeout: 15_000 })
@@ -66,7 +66,7 @@ test.describe('UVic Tour', () => {
 
   test('calls the Monday PSYC handoff a stay-put, not a scramble', async ({ page }) => {
     await boot(page)
-    await page.getByTestId('class-row').filter({ hasText: 'PSYC 100B' }).first().click()
+    await page.getByTestId('week-class-row').filter({ hasText: 'PSYC 100B' }).first().click()
     await expect(page.getByTestId('transition-note')).toContainText(/stay put/i, { timeout: 15_000 })
   })
 
@@ -91,12 +91,6 @@ test.describe('UVic Tour', () => {
     expect(box!.width).toBeGreaterThan(vp.width * 0.9)   // full-width sheet, not a rail
   })
 
-  test('the scrubber offers all five weekdays', async ({ page }) => {
-    await boot(page)
-    const scrub = page.locator('#scrubber')
-    await expect(scrub).toBeVisible()
-    for (const d of ['MON', 'TUE', 'WED', 'THU', 'FRI']) await expect(scrub).toContainText(d)
-  })
 
   test('top bar controls are actually tappable, not covered by the map canvas', async ({ page }) => {
     await boot(page)

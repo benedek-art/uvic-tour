@@ -1,5 +1,10 @@
 /* ============================================================
-   UVic Tour — sheet, Now/Next, class list, detail card.
+   UVic Tour — sheet, Now/Next, detail card.
+
+   The sheet is ONE surface with three tiers (docs/WEEK-VIEW.md):
+   the peek answer, the week view, and the class detail. The week
+   view's own internals live in src/ui/week-view.css — everything
+   here stops at the `.sheet-week` container it is mounted into.
 
    Mobile-first: everything below is authored for a 390x844
    phone. Desktop (>=900px) is the enhancement at the bottom.
@@ -77,8 +82,11 @@
 
 .sheet-handle {
   flex: none;
-  display: grid;
-  place-items: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
   width: 100%;
   height: var(--tap);          /* the grip is small; the target is not */
   padding: 0;
@@ -86,6 +94,24 @@
   cursor: grab;
 }
 .sheet-handle:active { cursor: grabbing; }
+
+/* "Your week" — the only advertisement the second tier gets.
+   It sits inside the handle's fixed 44 px, so the peek detent (the handle plus the
+   hero card, measured in sheet.ts) does not grow by a pixel, and the handle was
+   already a button that opens the sheet. sheet.ts hides it above the peek detent. */
+.sheet-handle-label {
+  /* Sentence case on purpose. In uppercase with letter-spacing it landed directly
+     above the card's own "YOUR NEXT CLASS" kicker in the same size and colour, and
+     the two read as one stuttering header. This has to read as a control. */
+  font-size: 12.5px;
+  font-weight: 500;
+  letter-spacing: 0;
+  line-height: 1;
+  color: var(--text-dim);
+  transition: color var(--dur) var(--ease);
+}
+.sheet-handle:hover .sheet-handle-label,
+.sheet-handle:focus-visible .sheet-handle-label { color: var(--text); }
 
 /* The Now/Next header. A drag started here is a drag, full stop — it is the largest
    thing on screen at the peek detent, and aiming for the handle on a phone is not a
@@ -279,6 +305,18 @@
   transform: translateY(1px);
 }
 
+/* ---------- the hero, demoted --------------------------------------------------
+   While a class is selected the detail card below is the answer, and it names a
+   building at 22 px. The hero must not name a different one at 21 px directly above
+   it — see the `compact` branch in now-next.ts. What survives is the countdown and
+   the course code, at the size of a caption, still tappable to come back. */
+
+.nn[data-mode='compact'] .nn-count-num { font-size: 22px; }
+.nn[data-mode='compact'] .nn-count-label { font-size: 12px; }
+.nn[data-mode='compact'] .nn-room { font-size: 12.5px; }
+.nn[data-mode='compact'] { padding-bottom: 0; }
+.nn[data-mode='compact'] .nn-card { padding-bottom: 0; }
+
 .nn-note,
 .dc-note {
   font-size: 13px;
@@ -293,119 +331,27 @@
 .nn-note[data-kind='impossible'],
 .dc-note[data-kind='impossible'] { color: var(--danger); border-left-color: var(--danger); }
 
-/* ---------- class list ------------------------------------ */
+/* ---------- the week view's container ---------------------- 
+   Tier 2 (docs/WEEK-VIEW.md). Everything inside is week-view.css's; this is only
+   the seam between the answer and the week — one hairline, so the eye reads a
+   change of subject without a heading shouting at it. */
 
-.cl { padding-top: var(--s5); border-top: 1px solid var(--hairline); margin-top: var(--s4); }
-
-.cl-heading {
-  font-size: 17px;
-  font-weight: 700;
-  letter-spacing: -.01em;
-  color: var(--text);
-  margin: 0 0 var(--s2);
-}
-
-.cl-group { margin-bottom: var(--s3); }
-
-.cl-day {
-  font-size: 10.5px;
-  font-weight: 500;
-  letter-spacing: .18em;
-  color: var(--text-dim);
-  margin: var(--s4) 0 var(--s1);
-}
-
-.cl-row {
-  display: grid;
-  grid-template-columns: 3px 1fr auto;
-  align-items: center;
-  gap: var(--s3);
-  width: 100%;
-  min-height: 68px;            /* well over the 44px floor */
-  padding: var(--s2) var(--s2) var(--s2) 0;
-  text-align: left;
-  border-radius: var(--radius-sm);
-  transition: background var(--dur-fast) var(--ease);
-}
-.cl-row + .cl-row { border-top: 1px solid var(--hairline); }
-.cl-row:active { background: color-mix(in srgb, var(--gold) 9%, transparent); }
-.cl-row.is-selected { background: color-mix(in srgb, var(--gold) 11%, transparent); }
-
-.cl-rule {
-  align-self: stretch;
-  width: 3px;
-  min-height: 40px;
-  border-radius: 99px;
-  background: var(--gold-dim);
-  transition: background var(--dur-fast) var(--ease);
-}
-.cl-row.is-selected .cl-rule { background: var(--gold); }
-
-.cl-main {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  min-width: 0;
-}
-
-.cl-code {
-  font-size: 16px;
-  font-weight: 700;
-  letter-spacing: -.01em;
-  color: var(--text);
-}
-
-/* The building, not a four-letter tag. This is the only part of a row that names
-   somewhere the student can walk to, so it outranks the course title. */
-.cl-where {
-  font-size: 13.5px;
-  color: var(--text);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.cl-title {
-  font-size: 11.5px;
-  color: var(--text-dim);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.cl-meta {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 3px;
-}
-
-.cl-days {
-  font-size: 10px;
-  letter-spacing: .12em;
-  color: var(--text-dim);
-  white-space: nowrap;
-}
-
-.cl-time {
-  font-size: 12px;
-  color: var(--text);
-  white-space: nowrap;
-}
-.cl-time[data-dark='true'] { color: var(--cyan); }
-
-.cl-room {
-  font-size: 11.5px;
-  color: var(--text-dim);
-  white-space: nowrap;
+.sheet-week {
+  padding-top: var(--s4);
+  margin-top: var(--s4);
+  border-top: 1px solid var(--hairline);
 }
 
 /* ---------- detail card ----------------------------------- */
 
+/* Tier 3, and it slots between the answer and the week rather than replacing
+   either. The hairline is on TOP because `.sheet-week` already carries the one
+   below it — two adjacent rules a few pixels apart read as a rendering fault. */
 .dc {
   display: block;
-  padding: var(--s4) 0 var(--s2);
-  border-bottom: 1px solid var(--hairline);
+  padding: var(--s5) 0 var(--s2);
+  margin-top: var(--s4);
+  border-top: 1px solid var(--hairline);
   animation: dc-in var(--dur) var(--ease);
 }
 
@@ -581,7 +527,7 @@
 /* ---------- shared ---------------------------------------- */
 
 .sheet button:focus-visible,
-.sheet .cl-row:focus-visible {
+.sheet [tabindex]:focus-visible {
   outline: 2px solid var(--gold);
   outline-offset: 2px;
 }

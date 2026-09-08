@@ -44,9 +44,9 @@ describe('mountSheet', () => {
     expect(root.hidden).toBe(false)
   })
 
-  it('renders exactly five class rows', () => {
+  it('renders every session of the week', () => {
     const root = mount(new Date('2026-09-14T16:00:00-07:00'))
-    expect(root.querySelectorAll('[data-testid="class-row"]')).toHaveLength(5)
+    expect(root.querySelectorAll('[data-testid="week-class-row"]')).toHaveLength(12)
   })
 
   it('renders the pre-term state without throwing', () => {

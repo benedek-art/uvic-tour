@@ -29,7 +29,6 @@ import { dropRoomPin, clearRoomPin, renderPOIs, setPOIsVisible } from './map/mar
 
 import { createStore } from './ui/store'
 import { mountSheet, type AppState } from './ui/sheet'
-import { mountScrubber } from './ui/scrubber'
 import { mountLayerToggles } from './ui/layers'
 import { mountTourButton, startTour, stopTour } from './ui/tour'
 import {
@@ -95,6 +94,13 @@ async function main(): Promise<void> {
     store,
     onSelect: selectSession,
     onRoute: drawRoute,
+    onFocusDay: (day: Day) => {
+      // Light only the buildings that day actually uses, so tapping a day answers
+      // "where am I going on Thursday?" on the map itself.
+      const names = [...new Set((WEEK[day] ?? []).map(x => x.course.building))]
+      setHeroBuildings(map, names.length ? names : [...SCHEDULE_BUILDINGS])
+      hidePlaceCard()
+    },
     onRouteFromHome: (to: Session) => {
       const home = buildingCentroid(HOME_BUILDING)
       const dest = buildingCentroid(to.course.building)
@@ -102,12 +108,6 @@ async function main(): Promise<void> {
     },
   })
 
-  mountScrubber(document.getElementById('scrubber')!, {
-    store,
-    onScrub: (day: Day, minutes: number | null) => {
-      store.set({ scrubDay: day, scrubMinutes: minutes })
-    },
-  })
 
   const topbar = document.getElementById('topbar')!
   topbar.hidden = false
@@ -125,40 +125,30 @@ async function main(): Promise<void> {
   // so a hardcoded offset in scrubber.css would overlap it. Publish the real height and
   // get the scrubber out of the way entirely once the sheet is expanded over it.
   const sheetEl = document.getElementById('sheet')!
-  const scrubEl = document.getElementById('scrubber')!
   const syncChrome = (): void => {
     const detent = sheetEl.dataset['detent'] ?? 'peek'
+    // The sheet is taller than its peek and hangs below the fold, so measure the VISIBLE
+    // portion (viewport bottom minus its top), not its full height.
+    const r = sheetEl.getBoundingClientRect()
+    const peek = Math.round(Math.max(0, window.innerHeight - r.top))
+
     if (detent === 'peek') {
-      // The sheet is taller than its peek and hangs below the fold, so measure the
-      // VISIBLE portion (viewport bottom minus its top), not its full height.
-      const r = sheetEl.getBoundingClientRect()
-      const h = Math.round(Math.max(0, window.innerHeight - r.top))
-      // Set on the element, not :root — scrubber.css declares --sheet-peek on `.scrub`,
-      // which would outrank a :root override.
-      scrubEl.style.setProperty('--sheet-peek', `${h}px`)
-      // Publish how much chrome sits at the bottom so floating overlays (place card,
-      // legend) can clear it instead of guessing a fixed offset.
-      const chromeH = Math.round(Math.max(0, window.innerHeight - scrubEl.getBoundingClientRect().top))
-      document.documentElement.style.setProperty('--chrome-bottom', `${chromeH}px`)
-      scrubEl.classList.remove('is-hidden')
+      // Publish how much chrome sits at the bottom so floating overlays (the place card)
+      // can clear it instead of guessing a fixed offset.
+      document.documentElement.style.setProperty('--chrome-bottom', `${peek}px`)
       restoreLegend()
-    } else {
-      scrubEl.classList.add('is-hidden')
-      // The sheet is now over the map-level overlays; get them out of its way.
-      dismissMapOverlays()
-    }
-    // Tell the camera which part of the canvas is actually visible, so the campus is
-    // framed in the clear band between the top bar and the panels instead of behind them.
-    //
-    // Padding is derived from the RESTING (peek) layout only. Recomputing it as the sheet
-    // is dragged would shift the camera centre on every detent change and walk the view
-    // off the campus — the sheet expanding is a temporary overlay, not a new framing.
-    if (detent === 'peek') {
+
+      // Tell the camera which part of the canvas is actually visible, so the campus is
+      // framed in the clear band above the sheet instead of behind it.
+      //
+      // Derived from the RESTING layout only. Recomputing as the sheet is dragged would
+      // shift the camera centre on every detent change and walk the view off campus.
       const topbarEl = document.getElementById('topbar')
       const topPad = topbarEl && !topbarEl.hidden ? Math.round(topbarEl.getBoundingClientRect().height) : 0
-      const scrubTop = scrubEl.getBoundingClientRect().top
-      const bottomPad = Math.round(Math.max(0, window.innerHeight - scrubTop))
-      map.setPadding({ top: topPad + 8, bottom: bottomPad + 8, left: 8, right: 8 })
+      map.setPadding({ top: topPad + 8, bottom: peek + 8, left: 8, right: 8 })
+    } else {
+      // The sheet is now over the map-level overlays; get them out of its way.
+      dismissMapOverlays()
     }
   }
   new ResizeObserver(syncChrome).observe(sheetEl)
@@ -168,9 +158,9 @@ async function main(): Promise<void> {
 
   // --- guided tour -------------------------------------------------------------------
   const overlay = document.getElementById('tour-overlay')!
-  // The tour draws its own Stop button in the overlay, so the whole top bar steps aside
-  // too — otherwise the launch button and layer toggles collide with it on a phone.
-  const chrome = [document.getElementById('sheet')!, scrubEl, topbar]
+  // The tour draws its own Done button in the overlay, so the sheet and the top bar
+  // both step aside while it plays.
+  const chrome = [sheetEl, topbar]
   const setChromeHidden = (hidden: boolean): void => {
     for (const el of chrome) el.classList.toggle('is-hidden', hidden)
   }

@@ -1,5 +1,24 @@
 /**
- * The bottom sheet — the primary navigation surface on a phone.
+ * The bottom sheet — the whole UI on a phone, and now the ONLY one.
+ *
+ * ONE SURFACE, THREE TIERS (docs/WEEK-VIEW.md). The sheet used to split a single
+ * question — "where do I go and when?" — across three places: a hero card, a flat
+ * five-course list in no useful order, and a separate floating "My week" pill holding
+ * the timeline. Scrolling one surface now answers it end to end:
+ *
+ *   1. PEEK      the answer. Next class, where, when, leave by, and one big
+ *                terracotta "Take me there". Visible with no interaction at all.
+ *   2. THE WEEK  scroll down and every day of the week is there, in order, with the
+ *                gaps between classes shown as rows of their own. Owned by
+ *                `src/ui/week-view.ts`; this file only gives it a container and the
+ *                two callbacks it needs.
+ *   3. DETAIL    tap a class and the detail card opens above the week, carrying the
+ *                hand-written room-finding directions — the single most useful block
+ *                in the app for someone who has never been in the building.
+ *
+ * The floating week scrubber is redundant now and `main.ts` should stop mounting it:
+ * day focus is a tap on a day header in tier 2, which is why `SheetDeps.onFocusDay`
+ * exists.
  *
  * Not a small-screen fallback: below 900 px this *is* the UI. Three detents (peek,
  * half, full) let the student see the Now/Next answer without touching anything, then
@@ -39,9 +58,9 @@ import './ui.css'
 import type { Store } from './store'
 import type { Session } from '../core/week'
 import type { Day } from '../data/schedule'
-import { createClassList } from './class-list'
 import { createDetail } from './detail-card'
 import { createNowNext, transitionBefore } from './now-next'
+import { mountWeekView } from './week-view'
 
 export interface AppState {
   now: Date
@@ -61,6 +80,12 @@ export interface SheetDeps {
   onRoute: (from: Session, to: Session) => void
   /** Orchestrator wires the walk from the residence (src/data/home.ts) to a class. */
   onRouteFromHome?: (to: Session) => void
+  /**
+   * Tapping a day header in the week view. Optional: the sheet always records the
+   * focused day in the store, and the orchestrator adds the map's half — lighting
+   * that day's buildings. This replaces the deleted scrubber's day pills.
+   */
+  onFocusDay?: (d: Day) => void
 }
 
 /**
@@ -122,8 +147,19 @@ export function mountSheet(root: HTMLElement, deps: SheetDeps): void {
   // --- structure ---------------------------------------------------------------
   const handle = el('button', 'sheet-handle')
   handle.type = 'button'
-  handle.setAttribute('aria-label', 'Resize the class panel')
-  handle.append(el('span', 'sheet-grip'))
+  /**
+   * The handle says what is underneath it.
+   *
+   * At peek the sheet shows one answer and one button, and the week — the whole point
+   * of the rebuild — is below the fold with nothing to advertise it but a 5 px grip.
+   * A first-year should not have to guess that the card slides. The label lives INSIDE
+   * the fixed 44 px handle, so it costs the peek detent nothing (`peekHeight` is the
+   * handle plus the hero card), and the handle is already a button that cycles detents
+   * — tapping the words does exactly what they promise.
+   */
+  const handleLabel = el('span', 'sheet-handle-label')
+  handleLabel.textContent = 'Your week'
+  handle.append(el('span', 'sheet-grip'), handleLabel)
 
   const scroll = el('div', 'sheet-scroll')
 
@@ -156,14 +192,34 @@ export function mountSheet(root: HTMLElement, deps: SheetDeps): void {
     onRoute: deps.onRoute,
     onRouteFromHome: deps.onRouteFromHome,
   })
-  const classList = createClassList({ store, onSelect: deps.onSelect })
 
   // The hero card is the sheet's header as far as the finger is concerned: it is the
   // biggest thing visible at peek, so it has to be a drag surface. `.sheet-grab` is
   // what carries `touch-action: none` for it — see ui.css.
   nowNext.el.classList.add('sheet-grab')
 
-  scroll.append(nowNext.el, detail.el, classList.el)
+  /**
+   * Tier 2. `week-view.ts` owns everything inside this container — day headers, class
+   * rows, the gap rows between them; the sheet only says where it goes and what a tap
+   * means. Selecting from here is the same act as selecting from the hero card, so it
+   * goes through the same store write and the same `onSelect`.
+   */
+  const week = el('div', 'sheet-week')
+  mountWeekView(week, {
+    store,
+    onSelectSession: (s: Session) => {
+      store.set({ selected: s })
+      deps.onSelect(s)
+    },
+    onFocusDay: (d: Day) => {
+      // Recorded in the store whether or not the orchestrator has wired the map half,
+      // so the week view can show which day is focused with no extra plumbing.
+      store.set({ scrubDay: d })
+      deps.onFocusDay?.(d)
+    },
+  })
+
+  scroll.append(nowNext.el, detail.el, week)
   root.append(handle, scroll)
 
   // --- detents -----------------------------------------------------------------
@@ -240,6 +296,11 @@ export function mountSheet(root: HTMLElement, deps: SheetDeps): void {
     root.classList.toggle('is-dragging', !animate)
     apply(detents[detentIndex] ?? PEEK_MIN_PX)
     root.dataset['detent'] = ['peek', 'half', 'full'][detentIndex] ?? 'peek'
+    // Only worth saying while the week is hidden; once it is on screen the words are
+    // just noise over the thing they were pointing at.
+    const closed = detentIndex === 0
+    handleLabel.hidden = !closed
+    handle.setAttribute('aria-label', closed ? 'Show your week' : 'Resize the panel')
   }
 
   function remeasure(): void {
@@ -443,7 +504,6 @@ export function mountSheet(root: HTMLElement, deps: SheetDeps): void {
     // takes it whenever a class is selected.
     const heroRebuilt = nowNext.update(state, state.selected === null)
     detail.update(state)
-    classList.update(state)
 
     const selectedId = state.selected?.course.id ?? null
     if (selectedId !== lastSelectedId) {

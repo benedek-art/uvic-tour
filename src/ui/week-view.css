@@ -1,0 +1,414 @@
+/* ============================================================
+   UVic Tour — the week view (docs/WEEK-VIEW.md, Tier 2).
+
+   Authored for a 390x844 phone. Tokens come from src/tokens.css:
+   never a raw hex, never an rgba()/hsl() literal, never a glow.
+   Every tint is color-mix() FROM a token, and every color-mix
+   declaration is preceded by a plain-token fallback so an engine
+   without color-mix still paints something legible rather than
+   nothing at all.
+
+   THE IDEA: one vertical spine runs down each day. Classes are
+   dots on it; the gaps between them are the line itself. A long
+   free gap is physically TALLER than a short one and its spine
+   goes dashed — so Monday's six-hour hole looks like a hole
+   before a single word has been read. That is the whole design.
+
+   COLOUR BUDGET (docs/REDESIGN.md §1): terracotta --gold means
+   "yours" — the class dots and the Today/Now markers, nothing
+   else, and nothing filled. Sage --cyan means "place" and is
+   spent on exactly one thing: the stay-put connector. Everything
+   else on this surface is paper and ink.
+   ============================================================ */
+
+.wk {
+  /* Geometry of the spine. The time column, the gutter beside it, and the
+     x-position of the line are derived from one another so the dots, the line and
+     the dashed free-gap segments can never drift apart. */
+  --wk-time: 50px;
+  --wk-gutter: 28px;
+  --wk-spine: calc(var(--wk-time) + var(--wk-gutter) / 2 - 1px);
+
+  display: block;
+  padding-bottom: var(--s5);
+}
+
+/* ---------- the orientation anchor ------------------------- */
+
+.wk-head {
+  padding: var(--s4) 0 var(--s3);
+}
+
+.wk-title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+
+/* Derived at runtime: "5 courses · 3 buildings · Monday is your longest day". */
+.wk-summary {
+  margin: var(--s2) 0 0;
+  font-size: 15px;
+  line-height: 1.45;
+  /* Two short lines beat one long line plus an orphan — this string is derived, so
+     its length changes with the schedule and cannot be tuned by hand. */
+  text-wrap: balance;
+  color: var(--text-dim);
+}
+
+.wk-hint {
+  margin: var(--s1) 0 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text-dim);
+  opacity: 0.85;
+}
+
+/* ---------- a day ------------------------------------------ */
+
+.wk-day + .wk-day {
+  margin-top: var(--s2);
+}
+
+/* Sticky so the day you are reading always names itself, however far down the
+   class rows you have scrolled. Opaque paper, not glass: this slides over other
+   text, and a translucent header over body copy is unreadable. */
+.wk-dayhead {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s3);
+  width: 100%;
+  min-height: var(--tap);
+  padding: var(--s2) 0;
+  text-align: left;
+  /* Sticky needs an opaque backdrop, and it has to be the SHEET's surface, not raw
+     --void: the sheet paints --glass over a partly-transparent --void, which lands
+     near-white, so a plain --void band here would read as a beige stripe sliding
+     over the page. Same two-layer idiom as `#sheet` in ui.css, same two tokens. */
+  background-color: var(--void);
+  background-image: linear-gradient(var(--glass), var(--glass));
+  border-bottom: 1px solid var(--hairline);
+}
+
+.wk-dayhead-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.wk-dayname {
+  font-size: 19px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+
+.wk-daymeta {
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+/* The only marker that says "you are here in the week". */
+.wk-today {
+  flex: none;
+  padding: 5px 11px;
+  border-radius: 99px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--gold);
+  background: var(--gold-dim);
+  background: color-mix(in srgb, var(--gold) 12%, transparent);
+}
+
+.wk-day.is-today .wk-dayname {
+  color: var(--gold);
+}
+
+/* ---------- the spine -------------------------------------- */
+
+.wk-rows {
+  position: relative;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+/* One continuous line per day. It starts and ends level with the first and last
+   class dot rather than at the edges of the list, so a day reads as a closed run. */
+.wk-rows::before {
+  content: '';
+  position: absolute;
+  left: var(--wk-spine);
+  top: 22px;
+  bottom: 22px;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--bldg);
+  background: color-mix(in srgb, var(--text) 12%, transparent);
+}
+
+/* ---------- a class row ------------------------------------ */
+
+.wk-item {
+  position: relative;
+}
+
+/* The dot. Terracotta because these are the student's own classes; the paper-coloured
+   ring punches the spine out behind it (a border, never a 0 0 Npx shadow — that reads
+   as a smudge on a light ground). */
+.wk-item::before {
+  content: '';
+  position: absolute;
+  left: calc(var(--wk-spine) - 6px);
+  top: 19px;
+  z-index: 1;
+  width: 14px;
+  height: 14px;
+  box-sizing: border-box;
+  border-radius: 50%;
+  border: 3px solid var(--void);
+  background: var(--gold);
+}
+
+.wk-item:has(.wk-class.is-past)::before {
+  background: var(--bldg-edge);
+}
+
+.wk-class {
+  /* Negative margin + equal padding: the content box lines up exactly with the
+     list's edge (so the spine maths holds) while the pressed state still has room
+     to breathe on both sides. */
+  display: grid;
+  grid-template-columns: var(--wk-time) 1fr;
+  column-gap: var(--wk-gutter);
+  align-items: start;
+  width: calc(100% + var(--s2) * 2);
+  margin-inline: calc(var(--s2) * -1);
+  padding: var(--s3) var(--s2);
+  min-height: var(--tap);
+  text-align: left;
+  border-radius: var(--radius-sm);
+  transition: background var(--dur-fast) var(--ease);
+}
+
+.wk-class:active {
+  background: var(--gold-dim);
+  background: color-mix(in srgb, var(--gold) 9%, transparent);
+}
+
+.wk-class.is-selected {
+  background: var(--gold-dim);
+  background: color-mix(in srgb, var(--gold) 11%, transparent);
+}
+
+.wk-class:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+
+/* Time first, always. Start loud, end quiet, both tabular so the column of times
+   reads as one straight edge down the whole week. */
+.wk-time {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding-top: 1px;
+}
+
+.wk-start {
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--text);
+}
+
+.wk-end {
+  font-size: 15px;
+  line-height: 1.2;
+  color: var(--text-dim);
+}
+
+/* "You will walk out of here into the dark." (src/core/sun.ts) */
+.wk-moon {
+  margin-top: 3px;
+  font-size: 15px;
+  line-height: 1;
+}
+
+.wk-body {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.wk-where {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--s2);
+}
+
+/* The building, in plain words — the one thing on the row you can walk to or say
+   out loud to a stranger. Loudest text in the row. */
+.wk-bldg {
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+
+.wk-room {
+  font-size: 15px;
+  line-height: 1.3;
+  color: var(--text-dim);
+}
+
+/* Quietest line on the row: they already know what course it is. */
+.wk-course {
+  font-size: 14px;
+  line-height: 1.35;
+  color: var(--text-dim);
+  opacity: 0.9;
+}
+
+/* Now / Next — the live marker on today's rows only. Never filled. */
+.wk-state {
+  flex: none;
+  padding: 3px 9px;
+  border-radius: 99px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--text-dim);
+  background: var(--bldg);
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+}
+
+.wk-state[data-phase='now'] {
+  color: var(--gold);
+  background: var(--gold-dim);
+  background: color-mix(in srgb, var(--gold) 14%, transparent);
+}
+
+/* Done is done: still readable, visibly behind you. */
+.wk-class.is-past .wk-start,
+.wk-class.is-past .wk-bldg {
+  color: var(--text-dim);
+}
+
+.wk-class.is-past .wk-room,
+.wk-class.is-past .wk-course {
+  opacity: 0.7;
+}
+
+/* ---------- a gap: a connector, not a card ----------------- */
+
+.wk-gap {
+  position: relative;
+  display: grid;
+  grid-template-columns: var(--wk-time) 1fr;
+  column-gap: var(--wk-gutter);
+  align-items: center;
+  min-height: 42px;
+  padding: var(--s1) 0;
+}
+
+/* A long break is drawn as empty time: taller, and the spine goes dashed through
+   it. This is the row that makes Monday's six-hour hole obvious at a glance. */
+.wk-gap[data-free='true'] {
+  min-height: 86px;
+}
+
+.wk-gap[data-free='true']::before {
+  content: '';
+  position: absolute;
+  left: var(--wk-spine);
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  /* Two layers: the dashes on top, the sheet's own surface underneath, masking the
+     solid spine that runs behind this row. Same --void + --glass stack as the day
+     header, for the same reason — a raw --void strip would read as a beige seam. */
+  background-color: var(--void);
+  background-image:
+    repeating-linear-gradient(to bottom, var(--bldg-edge) 0 5px, transparent 5px 12px),
+    linear-gradient(var(--glass), var(--glass));
+}
+
+.wk-gap-body {
+  grid-column: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-width: 0;
+}
+
+.wk-gap-head {
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 1.3;
+  color: var(--text-dim);
+}
+
+.wk-gap-sub {
+  font-size: 14px;
+  line-height: 1.35;
+  color: var(--text-dim);
+  opacity: 0.8;
+}
+
+.wk-gap[data-free='true'] .wk-gap-head {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+/* The single most useful surprise in this schedule: two Monday lectures in one
+   room. Sage, because it is a fact about a place. */
+.wk-gap[data-kind='same-room'] .wk-gap-head {
+  padding: 5px 11px;
+  border-radius: 99px;
+  font-weight: 600;
+  color: var(--cyan);
+  border: 1px solid var(--bldg-edge);
+  border: 1px solid color-mix(in srgb, var(--cyan) 32%, transparent);
+  background: var(--ground);
+  background: color-mix(in srgb, var(--cyan) 9%, transparent);
+}
+
+.wk-gap[data-kind='tight'] .wk-gap-head {
+  color: var(--warn);
+  font-weight: 600;
+}
+
+.wk-gap[data-kind='impossible'] .wk-gap-head {
+  color: var(--danger);
+  font-weight: 600;
+}
+
+.wk-empty {
+  padding: var(--s3) 0 var(--s3) calc(var(--wk-time) + var(--wk-gutter));
+  font-size: 15px;
+  color: var(--text-dim);
+}
+
+/* ---------- desktop rail (>=900px) -------------------------
+   The sheet becomes a 380 px left rail; the week view keeps its shape but gains a
+   little air, and the sticky headers keep working inside the rail's scroller. */
+@media (min-width: 900px) {
+  .wk {
+    --wk-time: 54px;
+    --wk-gutter: 30px;
+  }
+}

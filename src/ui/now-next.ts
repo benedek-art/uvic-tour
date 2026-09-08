@@ -407,11 +407,24 @@ export function createNowNext(deps: NowNextDeps): NowNextView {
       state.selected ? 'picked' : 'open',
     ].join('|')
 
+    /**
+     * Compact mode — a class is selected, and the detail card below is the answer.
+     *
+     * The full hero names a building at 21 px. So does the detail card, at 22 px, about
+     * a DIFFERENT class. Stacked in one scroll they read as a contradiction: "am I going
+     * to A144 or to D287?" — the exact confusion this rebuild exists to remove. So while
+     * something is selected the hero gives up the place, the walk and the big countdown
+     * and keeps only what the detail card cannot say: how long until the *next* class,
+     * and which one. Tapping it still switches back to that class.
+     */
+    const compact = !ownsTransitionNote
+
     let rebuilt = false
     if (nextShape !== shape) {
       rebuilt = true
       shape = nextShape
       root.dataset['kind'] = kind
+      root.dataset['mode'] = compact ? 'compact' : 'full'
 
       // Plain words. "IN CLASS NOW", not "NOW"; "YOUR NEXT CLASS", not "NEXT UP".
       // `TERM STARTS …` is uppercase in the string itself because a unit test reads
@@ -430,7 +443,13 @@ export function createNowNext(deps: NowNextDeps): NowNextView {
       badge.textContent = focus.scrubbing ? 'PREVIEW' : ''
       badge.hidden = !focus.scrubbing
 
-      if (session) {
+      if (session && compact) {
+        // No building name, no walk: one line that names the course and the hour.
+        place.hidden = true
+        room.textContent = `${session.course.code} · ${timeRange(session.start, session.end)}`
+        room.hidden = false
+        open.setAttribute('aria-label', `Back to your next class, ${session.course.code}.`)
+      } else if (session) {
         // The place, loud. The course code and the clock, quiet and on one line.
         placeName.textContent = friendlyBuilding(session.course.building)
         place.hidden = false
@@ -459,7 +478,9 @@ export function createNowNext(deps: NowNextDeps): NowNextView {
       // so nothing above it changes and the line is no longer simply blank.
       const homeLine = session && kind !== 'in-class' ? homeWalkLine(session) : null
       walk.removeAttribute('data-testid')
-      if (kind === 'before-next' && session && before && before.walkMinutes > 0) {
+      if (compact) {
+        walk.hidden = true
+      } else if (kind === 'before-next' && session && before && before.walkMinutes > 0) {
         walk.textContent = `${before.walkMinutes} min walk · leave by ${minutesToHHMM(session.start - before.walkMinutes)}`
         walk.hidden = false
         walk.dataset['kind'] = before.kind
@@ -476,14 +497,18 @@ export function createNowNext(deps: NowNextDeps): NowNextView {
         walk.hidden = true
       }
 
-      // The "and then?" line. Only one transition-note may exist on the page at a
-      // time, so the detail card takes the testid whenever a class is selected.
-      if (after) {
+      // The "and then?" line, and only while this card owns it.
+      //
+      // It used to stay on screen with the testid stripped whenever a class was
+      // selected — which put two transition notes in the same scroll, one about the
+      // next class and one about the selected class, saying different things about
+      // different days. The detail card's is the one the student asked for, so this
+      // one steps aside entirely rather than half-way.
+      if (after && ownsTransitionNote) {
         note.textContent = after.note
         note.dataset['kind'] = after.kind
         note.hidden = false
-        if (ownsTransitionNote) note.setAttribute('data-testid', 'transition-note')
-        else note.removeAttribute('data-testid')
+        note.setAttribute('data-testid', 'transition-note')
       } else {
         note.hidden = true
         note.removeAttribute('data-testid')

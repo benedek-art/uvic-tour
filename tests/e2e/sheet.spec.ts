@@ -228,7 +228,7 @@ test.describe('bottom sheet gesture', () => {
     await drag(page, from, { x: from.x, y: 40 })
     expect(await detent(page)).toBe('full')
 
-    await page.getByTestId('class-row').filter({ hasText: 'ITAL 100A' }).first().click()
+    await page.getByTestId('week-class-row').filter({ hasText: 'ITAL 100A' }).first().click()
     await expect(page.getByTestId('bottom-sheet')).toContainText(/wing D/i, { timeout: 15_000 })
   })
 
@@ -241,7 +241,7 @@ test.describe('bottom sheet gesture', () => {
     expect(await detent(page)).toBe('full')
     await page.locator('.sheet-scroll').evaluate((el) => { el.scrollTop = 0 })
 
-    const start = await pointOn(page, '[data-testid="class-row"]')
+    const start = await pointOn(page, '[data-testid="week-class-row"]')
     await mouseDrag(page, start, { x: start.x, y: start.y + 260 })
 
     expect(await detent(page)).not.toBe('full')
