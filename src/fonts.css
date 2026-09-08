@@ -1,39 +1,33 @@
 /* ============================================================
-   UVic Tour — self-hosted webfonts.
+   UVic Tour — self-hosted webfont.
 
    NOT loaded from Google Fonts. Campus wifi is unreliable and the whole point of
    baking the map data into the bundle is that this app works with no signal — an
    external font request would be the single thing that fails offline.
 
-   Both families ship as ONE variable woff2 each: Google serves the identical file
-   for Space Grotesk 400/500/600/700 and for JetBrains Mono 400/600, so a single
-   `font-weight` RANGE declaration covers every weight the UI uses. Latin subset
-   only (the same unicode-range Google's `latin` slice uses) — no Cyrillic/Greek/
-   Vietnamese, which would be wasted bytes on a phone.
+   ONE family, ONE file: Nunito ships as a variable woff2 covering 400–900, so a
+   single `font-weight` RANGE declaration serves every weight the UI uses. Latin
+   subset only (the same unicode-range Google's `latin` slice uses) — no Cyrillic/
+   Greek/Vietnamese, which would be wasted bytes on a phone.
 
-   Both are SIL Open Font License 1.1; see public/fonts/OFL-*.txt.
+   Nunito replaced Space Grotesk + JetBrains Mono. It is used for BOTH the display
+   and the "mono" token: times and countdowns rely on `font-variant-numeric:
+   tabular-nums` (see the `.mono` rule in ./tokens.css) rather than on a true
+   monospace face, so digits still hold their column and nothing jitters as a
+   countdown ticks. Net effect is 53 KB of fonts removed for 39 KB added.
 
-   The `--font-display` / `--font-mono` tokens in ./tokens.css reference these
-   family names verbatim. Do not rename the families.
+   SIL Open Font License 1.1; see public/fonts/OFL-Nunito.txt.
+
+   The `--font-display` / `--font-mono` tokens in ./tokens.css reference this
+   family name verbatim. Do not rename it.
    ============================================================ */
 
 @font-face {
-  font-family: 'Space Grotesk';
+  font-family: 'Nunito';
   font-style: normal;
-  font-weight: 400 700;   /* variable axis — covers 400/500/600/700 */
+  font-weight: 400 900;   /* variable axis */
   font-display: swap;
-  src: url('/fonts/space-grotesk-latin-var.woff2') format('woff2');
-  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
-    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
-    U+2212, U+2215, U+FEFF, U+FFFD;
-}
-
-@font-face {
-  font-family: 'JetBrains Mono';
-  font-style: normal;
-  font-weight: 400 600;   /* variable axis — covers 400/600 */
-  font-display: swap;
-  src: url('/fonts/jetbrains-mono-latin-var.woff2') format('woff2');
+  src: url('/fonts/nunito-latin-var.woff2') format('woff2');
   unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
     U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
     U+2212, U+2215, U+FEFF, U+FFFD;

@@ -32,8 +32,9 @@
   --shadow-lg:    0 20px 48px rgba(60, 48, 32, .18);
 
   /* --- type --- */
-  --font-display: 'Space Grotesk', ui-sans-serif, system-ui, -apple-system, sans-serif;
-  --font-mono:    'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+  --font-display: 'Nunito', ui-rounded, ui-sans-serif, system-ui, -apple-system, sans-serif;
+  /* Not a true monospace any more — Nunito with tabular figures. See ./fonts.css. */
+  --font-mono:    'Nunito', ui-rounded, ui-sans-serif, system-ui, -apple-system, sans-serif;
 
   /* --- spacing (mobile-first scale) --- */
   --s1: 4px;  --s2: 8px;  --s3: 12px; --s4: 16px;

@@ -317,7 +317,7 @@ export function mountSheet(root: HTMLElement, deps: SheetDeps): void {
   requestAnimationFrame(remeasure)
 
   window.addEventListener('resize', remeasure)
-  // Space Grotesk arrives after first paint and changes the card's height.
+  // The webfont arrives after first paint and changes the card's height.
   void document.fonts?.ready.then(remeasure).catch(() => {})
 
   // --- dragging ----------------------------------------------------------------

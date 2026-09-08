@@ -16,7 +16,7 @@
  * variant (when `state.scrubMinutes` is set the live clock is overridden). The
  * countdown re-writes a single text node once a second — the card's structure is
  * rebuilt only when the *shape* of the answer changes — so nothing reflows while
- * digits tick. JetBrains Mono with `tabular-nums` (see ui.css) keeps the numerals
+ * digits tick. Nunito with `tabular-nums` (see ui.css) keeps the numerals
  * from shuffling sideways.
  *
  * This module also owns the small amount of schedule reasoning the whole sheet
