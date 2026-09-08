@@ -6,6 +6,17 @@
  * stacked above it — but it must NOT become a full-width tap-blocker, or the user
  * can't pan the map along the top of the screen. So the bar itself is transparent to
  * pointers and only its actual controls take input.
+ *
+ * LAYOUT — one row, two poles, mobile first.
+ *   left  ... the layer toggles, fused into a single 88px segmented control
+ *   right ... "Show me campus", the primary action this whole app exists to show off
+ *
+ * It used to be `flex-wrap: wrap` over three equal-width text chips, which at 390px
+ * broke into a ragged two-row bar (Tour stops + Show me campus, then an orphaned
+ * Paths) 120px tall. `nowrap` + `space-between` is the fix: utilities on one side,
+ * hero on the other, 68px of a 844px screen, and the map keeps the rest. #topbar's
+ * height is measured in main.ts and fed to map.setPadding(), so every row saved here
+ * is a row of campus gained.
  */
 #topbar {
   position: absolute;
@@ -14,8 +25,9 @@
   right: 0;
   z-index: 30;              /* above the map, below the tour overlay (40) */
   display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
+  flex-wrap: nowrap;        /* deliberately: wrapping is what made it look accidental */
+  align-items: center;
+  justify-content: space-between;
   gap: var(--s2);
   padding: calc(var(--safe-t) + var(--s3)) calc(var(--safe-r) + var(--s3))
            var(--s3) calc(var(--safe-l) + var(--s3));
@@ -24,6 +36,17 @@
 
 #topbar > * {
   pointer-events: auto;     /* ...but the controls themselves are tappable */
+  flex: 0 0 auto;           /* neither pole squeezes the other */
+}
+
+/* Desktop (SPEC §4 Layout): both controls gather top-right, with more air. */
+@media (min-width: 900px) {
+  #topbar {
+    justify-content: flex-end;
+    gap: var(--s3);
+    padding: calc(var(--safe-t) + var(--s4)) calc(var(--safe-r) + var(--s4))
+             var(--s4) calc(var(--safe-l) + var(--s4));
+  }
 }
 
 /* Boot overlay */

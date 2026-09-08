@@ -13,25 +13,33 @@
 /* ------------------------------------------------------------
    Launch button — appended into #topbar by mountTourButton().
 
-   Sized and finished to sit alongside .layer-toggle (src/map/map.css) since they
-   share the bar, but deliberately warmer: this is the button the whole app exists
-   to show off. inline-flex + align-self so it never stretches to the bar's width,
-   whatever layout the bar ends up using.
+   THE primary action in the bar, and styled to say so: where the layer toggles are a
+   neutral glass switchboard, this is cyan-tinted, cyan-bordered and cyan-lit. That
+   contrast is the whole point of the top bar's redesign — two secondary utilities on
+   one side, one hero on the other, rather than three chips of equal weight.
+
+   No margin of its own: #topbar (src/chrome.css) owns the bar's padding, gap and
+   vertical centring. A margin here is what previously knocked this button out of
+   line with the toggles beside it.
    ------------------------------------------------------------ */
 
 .tour-launch {
   display: inline-flex;
-  align-self: flex-start;
   align-items: center;
   gap: var(--s2);
 
   min-height: var(--tap);
   padding: 0 var(--s4);
-  margin: var(--s2) var(--s3) 0;
 
   border: 1px solid var(--cyan);
   border-radius: var(--radius);
+  /* Fallback first, for anything without color-mix(). Still tokens, no raw hex. */
   background: var(--glass);
+  background:
+    linear-gradient(color-mix(in srgb, var(--cyan) 14%, transparent),
+                    color-mix(in srgb, var(--cyan) 14%, transparent)),
+    var(--glass);
+  box-shadow: 0 0 18px -4px var(--cyan);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
 
@@ -44,11 +52,15 @@
 
   transition:
     border-color var(--dur-fast) var(--ease),
+    box-shadow var(--dur-fast) var(--ease),
     transform var(--dur-fast) var(--ease);
 }
 
 .tour-launch:hover { border-color: var(--text); }
-.tour-launch:active { transform: scale(0.97); }
+.tour-launch:active {
+  transform: scale(0.97);
+  box-shadow: 0 0 24px -2px var(--cyan);
+}
 
 .tour-launch:focus-visible {
   outline: 2px solid var(--cyan);

@@ -1,0 +1,48 @@
+/* ============================================================
+   Home base — the walk from Roderick Haig-Brown.
+
+   Owned by src/data/home.ts's two consumers (now-next.ts, detail-card.ts).
+   Deliberately a separate file from ui.css: this is one small, self-contained
+   idea and it should be deletable in one move.
+
+   Colour rule (SPEC §4): --gold is reserved for the student's own class
+   buildings. Home is where they start, not a destination on the map, so it
+   takes a quiet --cyan-adjacent accent instead. Translucency is mixed from the
+   token rather than hardcoded, so the palette stays single-source.
+   ============================================================ */
+
+/* The "8 min from home · leave by 08:22" line in the Now/Next card.
+   Inherits .nn-walk's size, colour and rhythm — this only adds the accent that
+   says "this walk starts at your door", using the same left-rule vocabulary as
+   .nn-note so the card doesn't grow a new shape. */
+.nn-walk[data-kind='home'] {
+  padding-left: var(--s2);
+  border-left: 2px solid color-mix(in srgb, var(--cyan) 55%, transparent);
+  color: var(--text);
+}
+
+/* "Route from home" in the detail card. Same silhouette as .dc-route-btn so the
+   two actions read as a pair, cyan so the class route stays the gold one. */
+.dc-route-home-btn {
+  display: block;
+  width: 100%;
+  min-height: var(--tap);
+  margin-top: var(--s2);
+  padding: 0 var(--s4);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--cyan);
+  border: 1px solid color-mix(in srgb, var(--cyan) 42%, transparent);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--cyan) 6%, transparent);
+  transition: background var(--dur-fast) var(--ease);
+}
+
+.dc-route-home-btn:active {
+  background: color-mix(in srgb, var(--cyan) 16%, transparent);
+}
+
+/* When it is the only action, it stands where the route button would have. */
+.dc-route-home-btn:first-of-type {
+  margin-top: var(--s4);
+}

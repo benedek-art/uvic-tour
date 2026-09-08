@@ -15,6 +15,7 @@
  */
 
 import './ui.css'
+import './home.css'
 import type { AppState } from './sheet'
 import type { Store } from './store'
 import { route } from '../core/router'
@@ -22,6 +23,7 @@ import { buildingCentroid, type Transition } from '../core/transitions'
 import { endsAfterDark, sunsetMinutes } from '../core/sun'
 import { minutesToHHMM } from '../core/time'
 import type { Session } from '../core/week'
+import { HOME_BUILDING, HOME_LABEL, walkFromHome } from '../data/home'
 import { MAIN_ENTRANCE, ROOM_HINTS, type RoomHint } from '../data/rooms'
 import { WEEK, dayList, timeRange, transitionAfter, transitionBefore } from './now-next'
 
@@ -98,6 +100,11 @@ export interface DetailDeps {
   store: Store<AppState>
   onSelect: (s: Session | null) => void
   onRoute: (from: Session, to: Session) => void
+  /**
+   * Draw the walk from the residence to this class. Optional so the card still
+   * renders (minus the button's map effect) before the orchestrator wires it.
+   */
+  onRouteFromHome?: (to: Session) => void
 }
 
 export interface DetailView {
@@ -209,10 +216,14 @@ export function createDetail(deps: DetailDeps): DetailView {
     }
 
     // --- the walk ---------------------------------------------------------------
+    // Two possible origins: the neighbouring class, and home. Both write into the one
+    // summary line, which is only appended if at least one button exists — an empty
+    // "—" under no buttons would read as broken.
     const pair = routePair(session)
     const summary = el('p', 'dc-route-summary mono', '—')
     summary.setAttribute('data-testid', 'route-summary')
     summary.setAttribute('aria-live', 'polite')
+    let hasAction = false
 
     if (pair) {
       const button = el('button', 'dc-route-btn')
@@ -239,8 +250,33 @@ export function createDetail(deps: DetailDeps): DetailView {
         deps.onRoute(pair.from, pair.to)
       })
 
-      root.append(button, summary)
+      root.append(button)
+      hasAction = true
     }
+
+    // --- the walk from home -----------------------------------------------------
+    // Offered for every class, not just the first of the day: "how do I get there
+    // from my room?" is the question a first-year asks about a building they have
+    // never seen, whatever time it is. Distance is already memoised in src/data/home,
+    // so it is read here at build time and the click only draws.
+    const homeWalk = walkFromHome(course.building)
+    if (homeWalk) {
+      const homeButton = el('button', 'dc-route-home-btn')
+      homeButton.type = 'button'
+      homeButton.setAttribute('data-testid', 'route-from-home-btn')
+      homeButton.title = `From ${HOME_BUILDING}`
+      homeButton.textContent = `Route from ${HOME_LABEL.toLowerCase()}`
+
+      homeButton.addEventListener('click', () => {
+        summary.textContent = `${Math.round(homeWalk.metres)} m · ${homeWalk.minutes} min from ${HOME_LABEL.toLowerCase()}`
+        deps.onRouteFromHome?.(session)
+      })
+
+      root.append(homeButton)
+      hasAction = true
+    }
+
+    if (hasAction) root.append(summary)
   }
 
   function update(state: AppState): void {

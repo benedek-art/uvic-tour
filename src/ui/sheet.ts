@@ -8,12 +8,31 @@
  *
  * Dragging uses Pointer Events with `setPointerCapture`, so one code path covers
  * touch, mouse, and pen, and the gesture keeps working if the finger slides off the
- * handle. Only the handle carries `touch-action: none`; putting it on the sheet would
- * kill inner scrolling, and putting any listener on the document would eat the map's
- * own pan gestures — the map must stay draggable everywhere it is visible.
+ * element it started on. Listeners live on the sheet root — never on the document —
+ * so a pan that starts on the map is never ours to steal.
  *
- * Release snaps to a detent: fast flicks go one detent in the direction of travel,
- * slow drags settle on whichever detent is nearest.
+ * WHERE A DRAG MAY START (the bug this replaced: handle-only listeners meant a
+ * natural swipe anywhere on the card body did nothing on a phone):
+ *   - the grab handle and the whole Now/Next header — always, `touch-action: none`;
+ *   - anywhere in the scrolling body while there is nothing to scroll (below the
+ *     full detent the body is `overflow: hidden`, so it also gets `touch-action:
+ *     none` and every swipe is a sheet drag);
+ *   - in the body at the full detent only when the scroller is already at its top
+ *     and the finger is moving DOWN. That is the scroll/drag handoff; anything else
+ *     is left to the native scroll, which is why the body is `pan-y` there.
+ * Nothing is claimed until the finger has travelled DRAG_SLOP px, so a tap on a
+ * class row is still a tap.
+ *
+ * Release snaps to a detent: a flick is projected forward by its velocity and always
+ * moves at least one detent in the direction of travel; a slow drag settles on
+ * whichever detent is nearest. Past either end the movement is rubber-banded.
+ *
+ * `pointercancel` matters here: iOS Safari fires it where Chrome does not (a second
+ * finger, the app switcher, a system edge gesture), and a handler that ignores it
+ * leaves the sheet frozen mid-drag. It ends the drag exactly like `pointerup`.
+ *
+ * Reduced motion needs no JS: every snap is a CSS transition and tokens.css zeroes
+ * the durations, so the sheet jumps straight to the detent.
  */
 
 import './ui.css'
@@ -40,6 +59,8 @@ export interface SheetDeps {
   onSelect: (s: Session | null) => void
   /** Orchestrator wires the route drawing on the map. */
   onRoute: (from: Session, to: Session) => void
+  /** Orchestrator wires the walk from the residence (src/data/home.ts) to a class. */
+  onRouteFromHome?: (to: Session) => void
 }
 
 /**
@@ -55,9 +76,17 @@ const HALF_FRACTION = 0.5
 
 /** Past this speed (px/ms) a release is a flick, not a settle. */
 const FLICK_VELOCITY = 0.45
-/** Movement under this (px) with a quick release counts as a tap on the handle. */
-const TAP_SLOP = 8
-const TAP_MS = 350
+/** A flick is projected this many ms forward at its release speed before snapping. */
+const FLICK_PROJECTION_MS = 150
+/** A velocity sample older than this (ms) at release means the finger had stopped. */
+const VELOCITY_STALE_MS = 90
+/** Travel (px) before a gesture stops being a tap and becomes a drag. */
+const DRAG_SLOP = 8
+/** A gesture this much more horizontal than vertical is not a sheet drag. */
+const DIRECTION_LOCK = 1.2
+/** Asymptotic ceiling (px) of the rubber band past the top / below the peek. */
+const OVERDRAG_MAX = 28
+const UNDERDRAG_MAX = 40
 
 const DESKTOP_QUERY = '(min-width: 900px)'
 
@@ -94,8 +123,18 @@ export function mountSheet(root: HTMLElement, deps: SheetDeps): void {
   const scroll = el('div', 'sheet-scroll')
 
   const nowNext = createNowNext({ store, onSelect: deps.onSelect })
-  const detail = createDetail({ store, onSelect: deps.onSelect, onRoute: deps.onRoute })
+  const detail = createDetail({
+    store,
+    onSelect: deps.onSelect,
+    onRoute: deps.onRoute,
+    onRouteFromHome: deps.onRouteFromHome,
+  })
   const classList = createClassList({ store, onSelect: deps.onSelect })
+
+  // The hero card is the sheet's header as far as the finger is concerned: it is the
+  // biggest thing visible at peek, so it has to be a drag surface. `.sheet-grab` is
+  // what carries `touch-action: none` for it — see ui.css.
+  nowNext.el.classList.add('sheet-grab')
 
   scroll.append(nowNext.el, detail.el, classList.el)
   root.append(handle, scroll)
@@ -117,19 +156,54 @@ export function mountSheet(root: HTMLElement, deps: SheetDeps): void {
   }
 
   function measure(): void {
-    const h = window.innerHeight || 844
-    detents = [peekHeight(), Math.round(h * HALF_FRACTION), Math.round(h * FULL_FRACTION)]
+    // Measure the sheet's own rendered height rather than trusting `innerHeight *
+    // 0.9`: the CSS height is `90dvh`, and on iOS Safari with a URL bar dvh and
+    // innerHeight disagree — a stale full height leaves a gap under the sheet.
+    root.style.setProperty('--sheet-over', '0px')
+    const rendered = Math.round(root.getBoundingClientRect().height)
+    const full = rendered > 0 ? rendered : Math.round((window.innerHeight || 844) * FULL_FRACTION)
+    detents = [peekHeight(), Math.round(full * (HALF_FRACTION / FULL_FRACTION)), full]
   }
 
   function fullHeight(): number {
     return detents[detents.length - 1] ?? PEEK_MIN_PX
   }
 
-  /** Position the sheet by translating it down out of its own full height. */
+  /**
+   * Position the sheet by translating it down out of its own full height.
+   *
+   * Past the top detent the sheet cannot translate any further without lifting its
+   * bottom edge off the screen, so the overshoot grows its height instead
+   * (`--sheet-over`): the rubber band stretches the card rather than opening a gap.
+   */
   function apply(px: number): void {
+    const full = fullHeight()
     visible = px
-    root.style.setProperty('--sheet-y', `${Math.max(0, fullHeight() - px)}px`)
-    root.classList.toggle('is-full', px >= fullHeight() - 1)
+    root.style.setProperty('--sheet-y', `${Math.max(0, Math.round(full - px))}px`)
+    root.style.setProperty('--sheet-over', `${Math.max(0, Math.round(px - full))}px`)
+    root.classList.toggle('is-full', px >= full - 1)
+  }
+
+  /** Diminishing returns: `x` px of pull yields at most `max` px of movement. */
+  function rubber(x: number, max: number): number {
+    return max * (1 - Math.exp(-x / max))
+  }
+
+  /** Clamp a raw drag position onto the detent range, softly. */
+  function resist(px: number): number {
+    const full = fullHeight()
+    const peek = detents[0] ?? PEEK_MIN_PX
+    if (px > full) return full + rubber(px - full, OVERDRAG_MAX)
+    if (px < peek) return peek - rubber(peek - px, UNDERDRAG_MAX)
+    return px
+  }
+
+  function nearestIndex(px: number): number {
+    let best = 0
+    for (let i = 1; i < detents.length; i++) {
+      if (Math.abs((detents[i] ?? 0) - px) < Math.abs((detents[best] ?? 0) - px)) best = i
+    }
+    return best
   }
 
   function snapTo(index: number, animate = true): void {
@@ -157,78 +231,153 @@ export function mountSheet(root: HTMLElement, deps: SheetDeps): void {
   void document.fonts?.ready.then(remeasure).catch(() => {})
 
   // --- dragging ----------------------------------------------------------------
-  let dragging = false
+  /**
+   * `pending` = a finger is down and we have not decided yet; `dragging` = the slop
+   * was crossed and the sheet is following it. Deciding late is what keeps a tap on
+   * a class row a tap.
+   */
+  let phase: 'idle' | 'pending' | 'dragging' = 'idle'
+  let activeId = -1
+  let fromGrab = false
   let startY = 0
+  let startX = 0
   let startVisible = 0
-  let startTime = 0
+  let startScrollTop = 0
   let lastY = 0
   let lastTime = 0
   let velocity = 0
-  let moved = 0
+  /** Set for one turn after a real drag so the release does not fire a click. */
+  let suppressClick = false
 
-  handle.addEventListener('pointerdown', (event: PointerEvent) => {
-    if (isDesktop()) return
-    dragging = true
-    moved = 0
-    velocity = 0
-    startY = event.clientY
-    lastY = event.clientY
-    startTime = event.timeStamp
-    lastTime = event.timeStamp
-    startVisible = visible
-    root.classList.add('is-dragging')
-    handle.setPointerCapture(event.pointerId)
-  })
-
-  handle.addEventListener('pointermove', (event: PointerEvent) => {
-    if (!dragging) return
-    event.preventDefault()
-    const dy = startY - event.clientY
-    moved = Math.max(moved, Math.abs(dy))
-
-    const dt = event.timeStamp - lastTime
-    if (dt > 0) velocity = (lastY - event.clientY) / dt
-    lastY = event.clientY
-    lastTime = event.timeStamp
-
-    // Rubber-band a little past the ends rather than hard-stopping.
-    const min = (detents[0] ?? PEEK_MIN_PX) * 0.6
-    apply(Math.min(fullHeight(), Math.max(min, startVisible + dy)))
-  })
-
-  function endDrag(event: PointerEvent): void {
-    if (!dragging) return
-    dragging = false
-    if (handle.hasPointerCapture(event.pointerId)) handle.releasePointerCapture(event.pointerId)
-    root.classList.remove('is-dragging')
-
-    // A quick, still tap cycles detents — the handle is a button as well as a grip.
-    if (moved < TAP_SLOP && event.timeStamp - startTime < TAP_MS) {
-      snapTo((detentIndex + 1) % detents.length)
-      return
-    }
-
-    if (Math.abs(velocity) > FLICK_VELOCITY) {
-      snapTo(detentIndex + (velocity > 0 ? 1 : -1))
-      return
-    }
-
-    let nearest = 0
-    for (let i = 1; i < detents.length; i++) {
-      const here = detents[i] ?? 0
-      const best = detents[nearest] ?? 0
-      if (Math.abs(here - visible) < Math.abs(best - visible)) nearest = i
-    }
-    snapTo(nearest)
+  /** The handle and the Now/Next header drag unconditionally. */
+  function onGrabSurface(target: EventTarget | null): boolean {
+    return target instanceof Element && target.closest('.sheet-handle, .sheet-grab') !== null
   }
 
-  handle.addEventListener('pointerup', endDrag)
-  handle.addEventListener('pointercancel', endDrag)
+  const atFullDetent = (): boolean => detentIndex === detents.length - 1
 
-  // Keyboard parity for the handle: it is a real button, so Enter/Space fire click.
-  handle.addEventListener('click', (event) => {
-    // Pointer flow already handled the tap; only respond to synthesised clicks.
-    if (event.detail !== 0 || isDesktop()) return
+  /**
+   * Should a gesture that began in the scrolling body become a sheet drag?
+   *
+   * Below the full detent the body is `overflow: hidden` — there is nothing to
+   * scroll, so every swipe is ours. At the full detent the body scrolls, and the
+   * only gesture we take from it is a pull DOWN that starts at the very top: the
+   * handoff that makes a sheet feel native. Everything else stays a scroll.
+   */
+  function bodyGestureIsDrag(dy: number): boolean {
+    if (!atFullDetent()) return true
+    return dy > 0 && startScrollTop <= 0 && scroll.scrollTop <= 0
+  }
+
+  root.addEventListener('pointerdown', (event: PointerEvent) => {
+    if (isDesktop()) return
+    // Second fingers and right/middle buttons are not sheet drags.
+    if (!event.isPrimary) return
+    if (event.pointerType === 'mouse' && event.button !== 0) return
+
+    // Belt and braces: the previous gesture's click has already been and gone by the
+    // time a new finger lands, so nothing is left to suppress.
+    suppressClick = false
+    phase = 'pending'
+    activeId = event.pointerId
+    fromGrab = onGrabSurface(event.target)
+    startX = event.clientX
+    startY = event.clientY
+    lastY = event.clientY
+    lastTime = event.timeStamp
+    startVisible = visible
+    startScrollTop = scroll.scrollTop
+    velocity = 0
+  })
+
+  root.addEventListener('pointermove', (event: PointerEvent) => {
+    if (phase === 'idle' || event.pointerId !== activeId) return
+
+    if (phase === 'pending') {
+      const dy = event.clientY - startY
+      const dx = event.clientX - startX
+      if (Math.abs(dy) < DRAG_SLOP) return
+      // A mostly-horizontal swipe belongs to whatever is under it, not to us.
+      if (Math.abs(dx) > Math.abs(dy) * DIRECTION_LOCK) { phase = 'idle'; return }
+      if (!fromGrab && !bodyGestureIsDrag(dy)) { phase = 'idle'; return }
+
+      phase = 'dragging'
+      // Re-base on the point where the drag was recognised, so the sheet does not
+      // jump by the slop the moment it starts following the finger.
+      startY = event.clientY
+      startVisible = visible
+      root.classList.add('is-dragging')
+      // Capture on the sheet, paired with `touch-action` in ui.css. On iOS Safari
+      // capture alone is not enough: without the right touch-action, Safari's own
+      // scrolling claims the gesture before the first pointermove arrives.
+      try { root.setPointerCapture(event.pointerId) } catch { /* pointer already gone */ }
+    }
+
+    // The sheet owns this gesture now: stop the page doing anything else with it.
+    if (event.cancelable) event.preventDefault()
+
+    const dt = event.timeStamp - lastTime
+    if (dt > 0) {
+      // px/ms, positive = travelling up = sheet growing. Smoothed, or one jittery
+      // last sample decides the snap.
+      const sample = (lastY - event.clientY) / dt
+      velocity = velocity === 0 ? sample : velocity * 0.7 + sample * 0.3
+    }
+    lastY = event.clientY
+    lastTime = event.timeStamp
+
+    apply(resist(startVisible + (startY - event.clientY)))
+  })
+
+  /**
+   * End of gesture. Also the `pointercancel` path — iOS fires that where Chrome does
+   * not, and the sheet must land on a detent either way rather than freeze mid-drag.
+   */
+  function endDrag(event: PointerEvent): void {
+    if (phase === 'idle' || event.pointerId !== activeId) return
+    const wasDragging = phase === 'dragging'
+    phase = 'idle'
+    activeId = -1
+    if (root.hasPointerCapture(event.pointerId)) root.releasePointerCapture(event.pointerId)
+    if (!wasDragging) return
+
+    root.classList.remove('is-dragging')
+    suppressClick = true
+    requestAnimationFrame(() => { suppressClick = false })
+
+    // A finger that came to rest before lifting is a settle, not a flick.
+    if (event.timeStamp - lastTime > VELOCITY_STALE_MS) velocity = 0
+
+    if (Math.abs(velocity) > FLICK_VELOCITY) {
+      // Project where the flick was heading, then make sure it moves at least one
+      // detent that way — that is what lets a short, fast swipe down still dismiss.
+      const projected = nearestIndex(visible + velocity * FLICK_PROJECTION_MS)
+      snapTo(velocity > 0 ? Math.max(projected, detentIndex + 1) : Math.min(projected, detentIndex - 1))
+      return
+    }
+
+    snapTo(nearestIndex(visible))
+  }
+
+  root.addEventListener('pointerup', endDrag)
+  root.addEventListener('pointercancel', endDrag)
+
+  // A drag that ends over a class row must not also select it.
+  root.addEventListener(
+    'click',
+    (event) => {
+      if (!suppressClick) return
+      suppressClick = false
+      event.preventDefault()
+      event.stopPropagation()
+    },
+    true,
+  )
+
+  // The handle is a real button: a tap (or Enter/Space) cycles detents. Drags never
+  // reach this — they are swallowed by the capture listener above.
+  handle.addEventListener('click', () => {
+    if (isDesktop()) return
     snapTo((detentIndex + 1) % detents.length)
   })
 

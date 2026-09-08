@@ -15,7 +15,10 @@
   z-index: 20;
   display: flex;
   flex-direction: column;
-  height: 90dvh;
+  /* dvh, never vh: in Safari with a URL bar and in standalone PWA mode vh lies.
+     `--sheet-over` is the rubber band past the top detent — the card stretches
+     upward instead of lifting its bottom edge off the screen. */
+  height: calc(90dvh + var(--sheet-over, 0px));
   padding-left: var(--safe-l);
   padding-right: var(--safe-r);
   background: var(--glass);
@@ -27,12 +30,31 @@
   /* Driven by sheet.ts. A custom property, not an inline transform, so the
      desktop rail can override it with plain CSS. */
   transform: translateY(var(--sheet-y, 100%));
-  transition: transform var(--dur-slow) var(--ease);
+  transition: transform var(--dur-slow) var(--ease), height var(--dur-slow) var(--ease);
   will-change: transform;
   contain: paint;
 }
 
 #sheet.is-dragging { transition: none; }
+
+/* No spring, no settle: reduced motion means the sheet is simply at the detent.
+   (tokens.css already zeroes the durations; this states it for the sheet outright.) */
+@media (prefers-reduced-motion: reduce) {
+  #sheet.sheet { transition: none; }
+}
+
+/* ---------- touch-action: the whole reason this drags on iOS -----------------
+   Safari decides at touchstart whether a gesture belongs to its own scrolling. If
+   the element under the finger allows panning, the sheet's pointermove events never
+   arrive — the classic "it works in Chrome but not on my iPhone".
+
+     .sheet-handle / .sheet-grab  → none : always a drag surface.
+     .sheet-scroll                → none below the full detent, where the body is
+                                    `overflow: hidden` and has nothing to scroll,
+                                    so a swipe anywhere on the card drags the sheet.
+     #sheet.is-full .sheet-scroll → pan-y: the body really scrolls there, and the
+                                    scroll/drag handoff is decided in sheet.ts.
+   Desktop resets all of it — the rail scrolls and never drags. */
 
 .sheet-handle {
   flex: none;
@@ -41,11 +63,19 @@
   width: 100%;
   height: var(--tap);          /* the grip is small; the target is not */
   padding: 0;
-  /* ONLY here. On the sheet itself this would kill inner scrolling. */
   touch-action: none;
   cursor: grab;
 }
 .sheet-handle:active { cursor: grabbing; }
+
+/* The Now/Next header. A drag started here is a drag, full stop — it is the largest
+   thing on screen at the peek detent, and aiming for the handle on a phone is not a
+   gesture anyone should have to make. */
+.sheet-grab {
+  touch-action: none;
+  cursor: grab;
+}
+.sheet-grab:active { cursor: grabbing; }
 
 .sheet-grip {
   width: 44px;
@@ -60,6 +90,9 @@
 .sheet-scroll {
   flex: 1 1 auto;
   overflow: hidden;
+  touch-action: none;
+  /* The home indicator is respected here, not on the sheet, so the glass still runs
+     to the bottom edge of the screen. */
   padding: 0 var(--s4) calc(var(--s6) + var(--safe-b));
 }
 
@@ -67,8 +100,11 @@
    would fight the sheet itself. */
 #sheet.is-full .sheet-scroll {
   overflow-y: auto;
+  touch-action: pan-y;
   -webkit-overflow-scrolling: touch;
-  overscroll-behavior: contain;
+  /* `none`, not `contain`: contain still lets the body rubber-band at its own top
+     edge, and that bounce is exactly the gesture sheet.ts wants to turn into a drag. */
+  overscroll-behavior-y: none;
 }
 
 /* Several elements below set an explicit `display`, which outranks the UA's
@@ -446,8 +482,12 @@
 
   .sheet-handle { display: none; }
 
+  /* Nothing drags up here, so give every gesture back to the browser. */
+  .sheet-grab { touch-action: auto; cursor: auto; }
+
   .sheet-scroll {
     overflow-y: auto;
+    touch-action: pan-y;
     padding-top: var(--s5);
     padding-bottom: var(--s6);
   }

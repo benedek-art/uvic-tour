@@ -92,6 +92,11 @@ async function main(): Promise<void> {
     store,
     onSelect: selectSession,
     onRoute: drawRoute,
+    onRouteFromHome: (to: Session) => {
+      const home = buildingCentroid(HOME_BUILDING)
+      const dest = buildingCentroid(to.course.building)
+      if (home && dest) showRoute(map, home, dest)
+    },
   })
 
   mountScrubber(document.getElementById('scrubber')!, {
@@ -128,6 +133,10 @@ async function main(): Promise<void> {
       // Set on the element, not :root — scrubber.css declares --sheet-peek on `.scrub`,
       // which would outrank a :root override.
       scrubEl.style.setProperty('--sheet-peek', `${h}px`)
+      // Publish how much chrome sits at the bottom so floating overlays (place card,
+      // legend) can clear it instead of guessing a fixed offset.
+      const chromeH = Math.round(Math.max(0, window.innerHeight - scrubEl.getBoundingClientRect().top))
+      document.documentElement.style.setProperty('--chrome-bottom', `${chromeH}px`)
       scrubEl.classList.remove('is-hidden')
     } else {
       scrubEl.classList.add('is-hidden')

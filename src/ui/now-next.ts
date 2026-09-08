@@ -18,12 +18,14 @@
  */
 
 import './ui.css'
+import './home.css'
 import type { AppState } from './sheet'
 import type { Store } from './store'
 import { analyzeDay, type Transition } from '../core/transitions'
 import { endsAfterDark } from '../core/sun'
 import { DAYS, TERM_START, dayOfDate, minutesOfDate, minutesToHHMM } from '../core/time'
 import { buildWeek, resolveNow, type NowState, type Session } from '../core/week'
+import { walkFromHome } from '../data/home'
 import { COURSES, type Day } from '../data/schedule'
 
 /** Built once. `buildWeek` is pure and the course list never changes at runtime. */
@@ -56,6 +58,28 @@ export function transitionAfter(session: Session): Transition | null {
 /** What happens *before* this session — the walk that decides "leave by". */
 export function transitionBefore(session: Session): Transition | null {
   return transitionsFor(session.day).find((t) => sameSession(t.to, session)) ?? null
+}
+
+/** True when nothing on campus precedes this session — they are coming from home. */
+export function isFirstOfDay(session: Session): boolean {
+  return transitionBefore(session) === null
+}
+
+/**
+ * The "leave by" line for the first class of a day.
+ *
+ * Every other walk in this card is building-to-building, but the first class has no
+ * predecessor — the walk that actually decides whether they are late starts at their
+ * room in Roderick Haig-Brown. Same two facts, same shape, different origin.
+ *
+ * Null when the session is not first on its day (the transition note covers it) or
+ * when home cannot be routed to that building.
+ */
+export function homeWalkLine(session: Session): string | null {
+  if (!isFirstOfDay(session)) return null
+  const walk = walkFromHome(session.course.building)
+  if (!walk) return null
+  return `${walk.minutes} min from home · leave by ${minutesToHHMM(session.start - walk.minutes)}`
 }
 
 /** Short building tags. Full names are too wide for a 390 px row. */
@@ -347,6 +371,11 @@ export function createNowNext(deps: NowNextDeps): NowNextView {
       }
 
       // Walk line: only meaningful when a real walk stands between you and this class.
+      // Three origins, in order — the class before it, the same building, or home.
+      // The home case is what the first class of any day gets: `before` is null there,
+      // so nothing above it changes and the line is no longer simply blank.
+      const homeLine = session && kind !== 'in-class' ? homeWalkLine(session) : null
+      walk.removeAttribute('data-testid')
       if (kind === 'before-next' && session && before && before.walkMinutes > 0) {
         walk.textContent = `${before.walkMinutes} min walk · leave by ${minutesToHHMM(session.start - before.walkMinutes)}`
         walk.hidden = false
@@ -355,6 +384,11 @@ export function createNowNext(deps: NowNextDeps): NowNextView {
         walk.textContent = 'Same building — no walk.'
         walk.hidden = false
         walk.dataset['kind'] = before.kind
+      } else if (homeLine) {
+        walk.textContent = homeLine
+        walk.hidden = false
+        walk.dataset['kind'] = 'home'
+        walk.setAttribute('data-testid', 'home-walk')
       } else {
         walk.hidden = true
       }

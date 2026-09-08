@@ -3,7 +3,7 @@
   position: absolute;
   left: calc(var(--safe-l) + var(--s3));
   right: calc(var(--safe-r) + var(--s3));
-  bottom: calc(var(--safe-b) + var(--sheet-peek, 200px) + 96px);
+  bottom: calc(var(--chrome-bottom, 380px) + var(--s3));
   z-index: 25;              /* above the scrubber (8) and sheet (20), below the tour (40) */
   padding: var(--s4);
   border-radius: var(--radius);
@@ -89,7 +89,7 @@
   position: absolute;
   left: calc(var(--safe-l) + var(--s3));
   right: calc(var(--safe-r) + var(--s3));
-  bottom: calc(var(--safe-b) + var(--sheet-peek, 200px) + 96px);
+  bottom: calc(var(--chrome-bottom, 380px) + var(--s3));
   z-index: 24;
   display: flex;
   flex-wrap: wrap;
@@ -104,6 +104,11 @@
   font-size: 13px;
   color: var(--text-dim);
 }
+/* The legend floats over the map, so it must not swallow pan gestures.
+   Only its dismiss button takes input. */
+.legend { pointer-events: none; }
+.legend__dismiss { pointer-events: auto; }
+
 .legend__row { display: inline-flex; align-items: center; gap: var(--s2); }
 .legend__swatch { width: 10px; height: 10px; border-radius: 2px; flex: none; }
 .legend__swatch--gold { background: var(--gold); box-shadow: 0 0 8px rgba(255,182,39,.6); }
