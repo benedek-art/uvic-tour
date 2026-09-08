@@ -3,25 +3,33 @@
    Agents: import this, never edit it. Add component CSS elsewhere.
    ============================================================ */
 :root {
-  /* --- palette (SPEC §4) --- */
-  --void:      #05070E;
-  --ground:    #0B1020;
-  --bldg:      #18213A;
-  --bldg-edge: #2E3E63;
-  --gold:      #FFB627;   /* RESERVED: the student's own class buildings ONLY */
-  --gold-dim:  #8A6318;
-  --cyan:      #4DD8E6;   /* tour stops / POIs */
-  --path:      #1E2E4D;
-  --route:     #FFD873;
-  --text:      #E8EDF7;
-  --text-dim:  #7C89A6;
-  --danger:    #FF6B5A;
-  --warn:      #FFA23A;
+  /* --- palette: "Warm Paper" ------------------------------------------------
+     Light, warm, minimal. Token NAMES are kept from the old dark theme so every
+     stylesheet keeps working; only the values changed. Read them semantically:
+       --void/--ground  = paper + map ground
+       --gold           = THE accent: the student's own buildings and primary actions
+       --cyan           = places worth knowing (secondary accent)
+     One accent for "yours", one for "everything else". Nothing else is coloured. */
+  --void:      #F4F0E8;   /* app background — warm paper */
+  --ground:    #EAE4D8;   /* map ground */
+  --bldg:      #D9D1C3;   /* ordinary buildings */
+  --bldg-edge: #C7BEAD;   /* their tops / edges */
+  --gold:      #C0562F;   /* terracotta — YOUR class buildings, primary buttons */
+  --gold-dim:  #E2C4B6;   /* terracotta at rest */
+  --cyan:      #4E7A66;   /* sage — tour stops */
+  --path:      #D7CFC0;   /* footpaths */
+  --route:     #C0562F;   /* the active walking route */
+  --text:      #23211C;   /* ink */
+  --text-dim:  #6B655B;
+  --danger:    #B4402F;
+  --warn:      #B07A22;
 
   /* --- surfaces --- */
-  --glass:        rgba(11, 16, 32, .82);
-  --glass-border: rgba(120, 140, 190, .16);
-  --hairline:     rgba(120, 140, 190, .12);
+  --glass:        rgba(255, 253, 249, .90);
+  --glass-border: rgba(35, 33, 28, .10);
+  --hairline:     rgba(35, 33, 28, .08);
+  --shadow:       0 10px 30px rgba(60, 48, 32, .13);
+  --shadow-lg:    0 20px 48px rgba(60, 48, 32, .18);
 
   /* --- type --- */
   --font-display: 'Space Grotesk', ui-sans-serif, system-ui, -apple-system, sans-serif;
