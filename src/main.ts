@@ -17,6 +17,7 @@ registerSW({ immediate: true })
 
 import { COURSES, SCHEDULE_BUILDINGS, type Day } from './data/schedule'
 import { POIS } from './data/pois'
+import { HOME_BUILDING } from './data/home'
 import { buildWeek, type Session } from './core/week'
 import { dayOfDate } from './core/time'
 import { buildingCentroid } from './core/transitions'
@@ -31,6 +32,7 @@ import { mountSheet, type AppState } from './ui/sheet'
 import { mountScrubber } from './ui/scrubber'
 import { mountLayerToggles } from './ui/layers'
 import { mountTourButton, startTour, stopTour } from './ui/tour'
+import { showPOICard, showBuildingCard, hidePlaceCard, mountLegend } from './ui/place-card'
 
 const WEEK = buildWeek(COURSES)
 
@@ -62,12 +64,19 @@ async function main(): Promise<void> {
 
   // --- map <- ui ---------------------------------------------------------------------
   function selectSession(s: Session | null): void {
+    hidePlaceCard()
     store.set({ selected: s })
     if (!s) { clearRoomPin(map); clearRoute(map); frameCampus(map); return }
     clearRoute(map)
     flyToBuilding(map, s.course.building)
     const c = buildingCentroid(s.course.building)   // [lat, lon]
     if (c) dropRoomPin(map, [c[1], c[0]], s.course.room)
+  }
+
+  function routeFromHome(lat: number, lon: number, _label: string): void {
+    const home = buildingCentroid(HOME_BUILDING)
+    if (!home) return
+    showRoute(map, home, [lat, lon])
   }
 
   function drawRoute(from: Session, to: Session): void {
@@ -166,11 +175,35 @@ async function main(): Promise<void> {
     }), 0)
   })
 
+  // Tapping a tour stop must actually TELL you something — each POI carries a
+  // hand-written line about why it's worth knowing, which was never being shown.
   renderPOIs(map, POIS, (poi) => {
     store.set({ selected: null })
     clearRoomPin(map)
+    clearRoute(map)
     flyToPoint(map, [poi.lon, poi.lat], 17)
+    showPOICard(poi, { onRouteFromHome: routeFromHome })
   })
+
+  // Tapping a building explains why it is (or isn't) gold. Without this there was
+  // nothing on screen saying what the highlighted buildings even meant.
+  for (const layer of ['buildings-hero', 'buildings-3d']) {
+    if (!map.getLayer(layer)) continue
+    map.on('click', layer, (e) => {
+      const name = e.features?.[0]?.properties?.['name']
+      if (typeof name !== 'string' || !name) return
+      const here = COURSES.filter(c => c.building === name)
+      const c = buildingCentroid(name)
+      store.set({ selected: null })
+      clearRoomPin(map)
+      showBuildingCard(name, here, c ? { lat: c[0], lon: c[1] } : null,
+        { onRouteFromHome: routeFromHome })
+    })
+    map.on('mouseenter', layer, () => { map.getCanvas().style.cursor = 'pointer' })
+    map.on('mouseleave', layer, () => { map.getCanvas().style.cursor = '' })
+  }
+
+  mountLegend()
 
   Object.assign(window, { __map: map, __store: store, __week: WEEK })
 }
